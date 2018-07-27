@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from functools import wraps
 from threading import RLock
-from typing import Callable, Tuple, Optional, Iterable
+from typing import Callable, Tuple, Optional, Iterable, Coroutine
 
 try:
     from redis.exceptions import RedisError
@@ -199,7 +199,7 @@ class CircuitBreaker:
         exception_type = type(exception)
         return not issubclass(exception_type, tuple(self._excluded_exception_types))
 
-    def call(self, func, *args, **kwargs):
+    def call(self, func: Callable, *args, **kwargs):
         """
         Calls `func` with the given `args` and `kwargs` according to the rules
         implemented by the current state of this circuit breaker.
@@ -207,7 +207,7 @@ class CircuitBreaker:
         with self._lock:
             return self.state.call(func, *args, **kwargs)
 
-    async def call_async(self, func, *args, **kwargs):
+    async def call_async(self, func: Callable[..., Coroutine], *args, **kwargs):
         with self._lock:
             return await self.state.call_async(func, *args, **kwargs)
 
@@ -307,14 +307,14 @@ class CircuitBreakerStorage(ABC):
     class defines.
     """
 
-    def __init__(self, name):
+    def __init__(self, name: str):
         """
         Creates a new instance identified by `name`.
         """
         self._name = name
 
     @property
-    def name(self):
+    def name(self) -> str:
         """
         Returns a human friendly name that identifies this state.
         """
@@ -330,7 +330,7 @@ class CircuitBreakerStorage(ABC):
 
     @state.setter
     @abstractmethod
-    def state(self, state):
+    def state(self, state: str):
         """
         Override this method to set the current circuit breaker state.
         """
@@ -352,7 +352,7 @@ class CircuitBreakerStorage(ABC):
 
     @property
     @abstractmethod
-    def counter(self):
+    def counter(self) -> int:
         """
         Override this method to retrieve the current value of the failure counter.
         """
@@ -360,7 +360,7 @@ class CircuitBreakerStorage(ABC):
 
     @property
     @abstractmethod
-    def opened_at(self):
+    def opened_at(self) -> datetime:
         """
         Override this method to retrieve the most recent value of when the
         circuit was opened.
@@ -369,7 +369,7 @@ class CircuitBreakerStorage(ABC):
 
     @opened_at.setter
     @abstractmethod
-    def opened_at(self, date_time):
+    def opened_at(self, date_time: datetime):
         """
         Override this method to set the most recent value of when the circuit
         was opened.
@@ -637,7 +637,7 @@ class CircuitBreakerState:
         for listener in self._breaker.listeners:
             listener.success(self._breaker)
 
-    def call(self, func, *args, **kwargs):
+    def call(self, func: Callable, *args, **kwargs):
         """
         Calls `func` with the given `args` and `kwargs`, and updates the
         circuit breaker state according to the result.
@@ -658,7 +658,7 @@ class CircuitBreakerState:
             self._handle_success()
         return ret
 
-    async def call_async(self, func, *args, **kwargs):
+    async def call_async(self, func: Callable[..., Coroutine], *args, **kwargs):
 
         ret = None
         self.before_call(func, *args, **kwargs)
@@ -700,7 +700,7 @@ class CircuitBreakerState:
         """
         pass
 
-    def on_failure(self, exc):
+    def on_failure(self, exception: Exception):
         """
         Override this method to be notified when a call to the guarded
         operation fails.
@@ -774,17 +774,22 @@ class CircuitOpenState(CircuitBreakerState):
         if opened_at and datetime.utcnow() < opened_at + timeout:
             error_msg = 'Timeout not elapsed yet, circuit breaker still open'
             raise CircuitBreakerError(error_msg)
-        else:
-            self._breaker.half_open()
-            return self._breaker.call(func, *args, **kwargs)
 
     def call(self, func, *args, **kwargs):
         """
-        Delegate the call to before_call, if the time out is not elapsed it will throw an exception, otherwise we get
-        the results from the call performed after the state is switch to half-open
+        Call before_call to check if the breaker should close and open it if it passes.
         """
+        self.before_call(func, *args, **kwargs)
+        self._breaker.half_open()
+        return self._breaker.call(func, *args, **kwargs)
 
-        return self.before_call(func, *args, **kwargs)
+    async def call_async(self, func: Callable[..., Coroutine], *args, **kwargs):
+        """
+        Call before_call to check if the breaker should close and open it if it passes.
+        """
+        self.before_call(func, *args, **kwargs)
+        self._breaker.half_open()
+        return await self._breaker.call_async(func, *args, **kwargs)
 
 
 class CircuitHalfOpenState(CircuitBreakerState):
@@ -822,6 +827,8 @@ class CircuitHalfOpenState(CircuitBreakerState):
 class CircuitBreakerListener:
     """
     Listener class used to plug code to a CircuitBreaker instance when certain events happen.
+
+    todo async listener handlers
     """
 
     def before_call(self, breaker: CircuitBreaker, func: Callable, *args, **kwargs) -> None:
