@@ -1,4 +1,4 @@
-#-*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 
 """
 Threadsafe pure-Python implementation of the Circuit Breaker pattern, described
@@ -7,28 +7,24 @@ by Michael T. Nygard in his book 'Release It!'.
 For more information on this and other patterns and best practices, buy the
 book at http://pragprog.com/titles/mnee/release-it
 """
-
-import types
 import time
+
 import calendar
+import inspect
 import logging
+import types
+from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from functools import wraps
-import six
-import sys
-
-try:
-    from tornado import gen
-    HAS_TORNADO_SUPPORT = True
-except ImportError:
-    HAS_TORNADO_SUPPORT = False
-from typing import Callable, List, Tuple, Optional, Iterable, Collection
+from typing import Callable, Optional
 
 try:
     from redis.exceptions import RedisError
+
     HAS_REDIS_SUPPORT = True
 except ImportError:
     HAS_REDIS_SUPPORT = False
+    RedisError = None
 
 __all__ = (
     'CircuitBreaker', 'CircuitBreakerListener', 'CircuitBreakerError',
@@ -40,7 +36,7 @@ STATE_CLOSED = 'closed'
 STATE_HALF_OPEN = 'half-open'
 
 
-class CircuitBreaker(object):
+class CircuitBreaker:
     """
     More abstractly, circuit breakers exists to allow one subsystem to fail
     without destroying the entire system.
@@ -209,19 +205,6 @@ class CircuitBreaker(object):
         with self._lock:
             return self.state.call(func, *args, **kwargs)
 
-    def call_async(self, func, *args, **kwargs):
-        """
-        Calls async `func` with the given `args` and `kwargs` according to the rules
-        implemented by the current state of this circuit breaker.
-
-        Return a closure to prevent import errors when using without tornado present
-        """
-        @gen.coroutine
-        def wrapped():
-            with self._lock:
-                ret = yield self.state.call_async(func, *args, **kwargs)
-                raise gen.Return(ret)
-        return wrapped()
 
     def open(self):
         """
@@ -251,22 +234,12 @@ class CircuitBreaker(object):
         """
         Returns a wrapper that calls the function `func` according to the rules
         implemented by the current state of this circuit breaker.
-
-        Optionally takes the keyword argument `__pybreaker_call_coroutine`,
-        which will will call `func` as a Tornado co-routine.
         """
-        call_async = call_kwargs.pop('__pybreaker_call_async', False)
-
-        if call_async and not HAS_TORNADO_SUPPORT:
-            raise ImportError('No module named tornado')
 
         def _outer_wrapper(func):
             @wraps(func)
             def _inner_wrapper(*args, **kwargs):
-                if call_async:
-                    return self.call_async(func, *args, **kwargs)
                 return self.call(func, *args, **kwargs)
-            return _inner_wrapper
 
         if call_args:
             return _outer_wrapper(*call_args)
@@ -666,32 +639,8 @@ class CircuitBreakerState(object):
             self._handle_success()
         return ret
 
-    def call_async(self, func, *args, **kwargs):
-        """
-        Calls async `func` with the given `args` and `kwargs`, and updates the
-        circuit breaker state according to the result.
 
-        Return a closure to prevent import errors when using without tornado present
-        """
-        @gen.coroutine
-        def wrapped():
-            ret = None
 
-            self.before_call(func, *args, **kwargs)
-            for listener in self._breaker.listeners:
-                listener.before_call(self._breaker, func, *args, **kwargs)
-
-            try:
-                ret = yield func(*args, **kwargs)
-                if isinstance(ret, types.GeneratorType):
-                    raise gen.Return(self.generator_call(ret))
-
-            except BaseException as e:
-                self._handle_error(e)
-            else:
-                self._handle_success()
-            raise gen.Return(ret)
-        return wrapped()
 
     def generator_call(self, wrapped_generator):
         try:
