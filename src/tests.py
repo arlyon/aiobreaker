@@ -117,10 +117,11 @@ class BaseTestCases:
             """
             breaker = CircuitBreaker(fail_max=3, reset_timeout=0.5, **self.breaker_kwargs)
 
-            def func(): raise NotImplementedError()
+            def func():
+                raise DummyException()
 
-            self.assertRaises(NotImplementedError, breaker.call, func)
-            self.assertRaises(NotImplementedError, breaker.call, func)
+            self.assertRaises(DummyException, breaker.call, func)
+            self.assertRaises(DummyException, breaker.call, func)
             self.assertEqual('closed', breaker.current_state)
 
             # Circuit should open
@@ -315,6 +316,225 @@ class BaseTestCases:
             self.assertRaises(StopIteration, lambda: next(s))
             self.assertEqual(0, breaker.fail_counter)
 
+    class CircuitBreakerStorageBasedTestCaseAsync(ABC, AsyncTestCase):
+
+        @property
+        @abstractmethod
+        def breaker_kwargs(self) -> Dict:
+            pass
+
+        async def test_successful_call_async(self):
+            """
+            It should keep the circuit closed after a successful call.
+            """
+
+            async def func():
+                return True
+
+            breaker = CircuitBreaker()
+            self.assertTrue(await breaker.call_async(func))
+            self.assertEqual(0, breaker.fail_counter)
+            self.assertEqual(STATE_CLOSED, breaker.current_state)
+
+        async def test_one_failed_call_async(self):
+            """CircuitBreaker: it should keep the circuit closed after a few
+            failures.
+            """
+
+            async def func():
+                raise DummyException()
+
+            breaker = CircuitBreaker()
+
+            with self.assertRaises(DummyException):
+                await breaker.call_async(func)
+
+            self.assertEqual(1, breaker.fail_counter)
+            self.assertEqual(STATE_CLOSED, breaker.current_state)
+
+        async def test_one_successful_call_after_failed_call_async(self):
+            """
+            it should keep the circuit closed after few mixed outcomes.
+            """
+
+            async def suc():
+                return True
+
+            async def err():
+                raise DummyException()
+
+            breaker = CircuitBreaker()
+
+            with self.assertRaises(DummyException):
+                await breaker.call_async(err)
+
+            self.assertEqual(1, breaker.fail_counter)
+
+            self.assertTrue(await breaker.call_async(suc))
+            self.assertEqual(0, breaker.fail_counter)
+            self.assertEqual(STATE_CLOSED, breaker.current_state)
+
+        async def test_several_failed_calls_async(self):
+            """
+            it should open the circuit after multiple failures.
+            """
+            breaker = CircuitBreaker(fail_max=3, **self.breaker_kwargs)
+
+            async def raiser():
+                raise DummyException()
+
+            with self.assertRaises(DummyException):
+                await breaker.call_async(raiser)
+
+            with self.assertRaises(DummyException):
+                await breaker.call_async(raiser)
+
+            # Circuit should open
+            with self.assertRaises(CircuitBreakerError):
+                await breaker.call_async(raiser)
+
+            self.assertEqual(3, breaker.fail_counter)
+            self.assertEqual('open', breaker.current_state)
+
+        async def test_failed_call_after_timeout_async(self):
+            """CircuitBreaker: it should half-open the circuit after timeout.
+            """
+            breaker = CircuitBreaker(fail_max=3, reset_timeout=0.5, **self.breaker_kwargs)
+
+            async def func():
+                raise DummyException()
+
+            with self.assertRaises(DummyException):
+                await breaker.call_async(func)
+
+            with self.assertRaises(DummyException):
+                await breaker.call_async(func)
+
+            self.assertEqual('closed', breaker.current_state)
+
+            # Circuit should open
+            with self.assertRaises(CircuitBreakerError):
+                await breaker.call_async(func)
+
+            self.assertEqual(3, breaker.fail_counter)
+
+            # Wait for timeout
+            sleep(0.6)
+
+            # Circuit should open again
+            with self.assertRaises(CircuitBreakerError):
+                await breaker.call_async(func)
+
+            self.assertEqual(4, breaker.fail_counter)
+            self.assertEqual('open', breaker.current_state)
+
+        async def test_successful_after_timeout_async(self):
+            """
+            It should close the circuit when a call succeeds after timeout.
+            The successful function should only be called once.
+            """
+            breaker = CircuitBreaker(fail_max=3, reset_timeout=1, **self.breaker_kwargs)
+
+            async def suc():
+                suc.call_count += 1
+                return True
+            suc.call_count = 0
+
+            async def err():
+                raise DummyException()
+
+            with self.assertRaises(DummyException):
+                await breaker.call_async(err)
+
+            with self.assertRaises(DummyException):
+                await breaker.call_async(err)
+
+            self.assertEqual('closed', breaker.current_state)
+
+            # Circuit should open
+            with self.assertRaises(CircuitBreakerError):
+                await breaker.call_async(err)
+
+            with self.assertRaises(CircuitBreakerError):
+                await breaker.call_async(suc)
+
+            self.assertEqual(3, breaker.fail_counter)
+
+            # Wait for timeout, at least a second since redis rounds to a second
+            sleep(2)
+
+            # Circuit should close again
+            self.assertTrue(await breaker.call_async(suc))
+            self.assertEqual(0, breaker.fail_counter)
+            self.assertEqual('closed', breaker.current_state)
+            self.assertEqual(1, suc.call_count)
+
+        async def test_failed_call_when_halfopen_async(self):
+            """
+            It should open the circuit when a call fails in half-open state.
+            """
+
+            async def fun():
+                raise DummyException()
+
+            breaker = CircuitBreaker()
+
+            breaker.half_open()
+            self.assertEqual(0, breaker.fail_counter)
+            self.assertEqual('half-open', breaker.current_state)
+
+            # Circuit should open
+            with self.assertRaises(CircuitBreakerError):
+                await breaker.call_async(fun)
+
+            self.assertEqual(1, breaker.fail_counter)
+            self.assertEqual('open', breaker.current_state)
+
+        async def test_successful_call_when_halfopen_async(self):
+            """
+            It should close the circuit when a call succeeds in half-open state.
+            """
+
+            async def fun():
+                return True
+
+            breaker = CircuitBreaker()
+            breaker.half_open()
+            self.assertEqual(0, breaker.fail_counter)
+            self.assertEqual('half-open', breaker.current_state)
+
+            # Circuit should open
+            self.assertTrue(await breaker.call_async(fun))
+            self.assertEqual(0, breaker.fail_counter)
+            self.assertEqual('closed', breaker.current_state)
+
+        async def test_close_async(self):
+            """
+            It should allow the circuit to be closed manually.
+            """
+            breaker = CircuitBreaker(fail_max=3, **self.breaker_kwargs)
+
+            async def func():
+                raise DummyException()
+
+            with self.assertRaises(DummyException):
+                await breaker.call_async(func)
+
+            with self.assertRaises(DummyException):
+                await breaker.call_async(func)
+
+            # Circuit should open
+            with self.assertRaises(CircuitBreakerError):
+                await breaker.call_async(func)
+
+            self.assertEqual(3, breaker.fail_counter)
+            self.assertEqual('open', breaker.current_state)
+
+            # Circuit should close again
+            breaker.close()
+            self.assertEqual(0, breaker.fail_counter)
+            self.assertEqual('closed', breaker.current_state)
+
     class CircuitBreakerConfigurationTestCase(TestCase):
         """
         Tests for the CircuitBreaker class.
@@ -402,7 +622,7 @@ class BaseTestCases:
 
         def test_call_with_no_args(self):
             """
-            it should be able to invoke functions with no-args.
+            It should be able to invoke functions with no-args.
             """
 
             def func():
@@ -412,7 +632,8 @@ class BaseTestCases:
             self.assertTrue(breaker.call(func))
 
         def test_call_with_args(self):
-            """CircuitBreaker: it should be able to invoke functions with args.
+            """
+            It should be able to invoke functions with args.
             """
 
             def func(arg1, arg2):
@@ -423,7 +644,8 @@ class BaseTestCases:
             self.assertEqual((42, 'abc'), breaker.call(func, 42, 'abc'))
 
         def test_call_with_kwargs(self):
-            """CircuitBreaker: it should be able to invoke functions with kwargs.
+            """
+            It should be able to invoke functions with kwargs.
             """
 
             def func(**kwargs):
@@ -436,8 +658,8 @@ class BaseTestCases:
             self.assertEqual(kwargs, breaker.call(func, **kwargs))
 
         def test_add_listener(self):
-            """CircuitBreaker: it should allow the user to add a listener at a
-            later time.
+            """
+            It should allow the user to add a listener at a later time.
             """
             breaker = CircuitBreaker()
 
@@ -452,8 +674,8 @@ class BaseTestCases:
             self.assertEqual((first, second), breaker.listeners)
 
         def test_add_listeners(self):
-            """CircuitBreaker: it should allow the user to add listeners at a
-            later time.
+            """
+            It should allow the user to add listeners at a later time.
             """
             breaker = CircuitBreaker()
 
@@ -536,7 +758,8 @@ class BaseTestCases:
             self.assertEqual((), breaker.excluded_exceptions)
 
         def test_decorator(self):
-            """CircuitBreaker: it should be a decorator.
+            """
+            It should be a decorator.
             """
 
             breaker = CircuitBreaker()
@@ -562,12 +785,9 @@ class BaseTestCases:
             suc()
             self.assertEqual(0, breaker.fail_counter)
 
-        def test_decorator_async(self):
-            pass
-
         def test_name(self):
-            """CircuitBreaker: it should allow an optional name to be set and
-               retrieved.
+            """
+            It should allow an optional name to be set and retrieved.
             """
             name = "test_breaker"
             breaker = CircuitBreaker(name=name)
@@ -577,10 +797,78 @@ class BaseTestCases:
             breaker.name = name
             self.assertEqual(breaker.name, name)
 
+    class CircuitBreakerConfigurationTestCaseAsync(AsyncTestCase):
 
-class CircuitBreakerTestCase(AsyncTestCase,
-                             BaseTestCases.CircuitBreakerStorageBasedTestCase,
-                             BaseTestCases.CircuitBreakerConfigurationTestCase):
+        async def test_decorator_async(self):
+            """
+            It should also be an async decorator.
+            """
+            breaker = CircuitBreaker()
+
+            @breaker
+            async def suc():
+                """Docstring"""
+                pass
+
+            @breaker
+            async def err():
+                """Docstring"""
+                raise DummyException()
+
+            self.assertEqual('Docstring', suc.__doc__)
+            self.assertEqual('Docstring', err.__doc__)
+            self.assertEqual('suc', suc.__name__)
+            self.assertEqual('err', err.__name__)
+
+            with self.assertRaises(DummyException):
+                await err()
+            self.assertEqual(1, breaker.fail_counter)
+
+            await suc()
+            self.assertEqual(0, breaker.fail_counter)
+
+        async def test_call_with_no_args_async(self):
+            """
+            It should be able to invoke functions with no-args.
+            """
+
+            async def func():
+                return True
+
+            breaker = CircuitBreaker()
+            self.assertTrue(await breaker.call_async(func))
+
+        async def test_call_with_args_async(self):
+            """
+            It should be able to invoke functions with args.
+            """
+
+            async def func(arg1, arg2):
+                return arg1, arg2
+
+            breaker = CircuitBreaker()
+
+            self.assertEqual((42, 'abc'), await breaker.call_async(func, 42, 'abc'))
+
+        async def test_call_with_kwargs_async(self):
+            """
+            It should be able to invoke functions with kwargs.
+            """
+
+            async def func(**kwargs):
+                return kwargs
+
+            breaker = CircuitBreaker()
+
+            kwargs = {'a': 1, 'b': 2}
+
+            self.assertEqual(kwargs, await breaker.call_async(func, **kwargs))
+
+
+class CircuitBreakerTestCase(BaseTestCases.CircuitBreakerStorageBasedTestCase,
+                             BaseTestCases.CircuitBreakerStorageBasedTestCaseAsync,
+                             BaseTestCases.CircuitBreakerConfigurationTestCase,
+                             BaseTestCases.CircuitBreakerConfigurationTestCaseAsync):
     """
     Tests for the CircuitBreaker class.
     """
@@ -622,7 +910,8 @@ class CircuitBreakerTestCase(AsyncTestCase,
             self.assertEqual(breaker.fail_counter, 1)
 
 
-class CircuitBreakerRedisTestCase(BaseTestCases.CircuitBreakerStorageBasedTestCase):
+class CircuitBreakerRedisTestCase(BaseTestCases.CircuitBreakerStorageBasedTestCase,
+                                  BaseTestCases.CircuitBreakerStorageBasedTestCaseAsync):
     """
     Tests for the CircuitBreaker class.
     """
