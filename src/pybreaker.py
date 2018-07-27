@@ -288,7 +288,7 @@ class CircuitBreaker:
         self._name = name
 
 
-class CircuitBreakerStorage(object):
+class CircuitBreakerStorage(ABC):
     """
     Defines the underlying storage for a circuit breaker - the underlying
     implementation should be in a subclass that overrides the method this
@@ -309,25 +309,29 @@ class CircuitBreakerStorage(object):
         return self._name
 
     @property
-    def state(self):
+    @abstractmethod
+    def state(self) -> str:
         """
         Override this method to retrieve the current circuit breaker state.
         """
         pass
 
     @state.setter
+    @abstractmethod
     def state(self, state):
         """
         Override this method to set the current circuit breaker state.
         """
         pass
 
+    @abstractmethod
     def increment_counter(self):
         """
         Override this method to increase the failure counter by one.
         """
         pass
 
+    @abstractmethod
     def reset_counter(self):
         """
         Override this method to set the failure counter to zero.
@@ -335,6 +339,7 @@ class CircuitBreakerStorage(object):
         pass
 
     @property
+    @abstractmethod
     def counter(self):
         """
         Override this method to retrieve the current value of the failure counter.
@@ -342,6 +347,7 @@ class CircuitBreakerStorage(object):
         pass
 
     @property
+    @abstractmethod
     def opened_at(self):
         """
         Override this method to retrieve the most recent value of when the
@@ -350,7 +356,8 @@ class CircuitBreakerStorage(object):
         pass
 
     @opened_at.setter
-    def opened_at(self, datetime):
+    @abstractmethod
+    def opened_at(self, date_time):
         """
         Override this method to set the most recent value of when the circuit
         was opened.
