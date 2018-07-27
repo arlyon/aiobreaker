@@ -14,7 +14,6 @@ import calendar
 import logging
 from datetime import datetime, timedelta
 from functools import wraps
-import threading
 import six
 import sys
 
@@ -23,6 +22,7 @@ try:
     HAS_TORNADO_SUPPORT = True
 except ImportError:
     HAS_TORNADO_SUPPORT = False
+from typing import Callable, List, Tuple, Optional, Iterable, Collection
 
 try:
     from redis.exceptions import RedisError
