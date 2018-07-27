@@ -1,4 +1,4 @@
-#-*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 
 import unittest
 from time import sleep
@@ -8,7 +8,15 @@ from pytest import fail
 from tornado import gen
 from tornado import testing
 
-from pybreaker import *
+import fakeredis
+import logging
+from redis.exceptions import RedisError
+
+import threading
+from types import MethodType
+
+from pybreaker import CircuitBreaker, CircuitBreakerError, CircuitBreakerListener, STATE_OPEN, STATE_CLOSED, \
+    STATE_HALF_OPEN, CircuitMemoryStorage, CircuitRedisStorage
 
 
 class CircuitBreakerStorageBasedTestCase(object):
@@ -21,7 +29,9 @@ class CircuitBreakerStorageBasedTestCase(object):
         """CircuitBreaker: it should keep the circuit closed after a successful
         call.
         """
+
         def func(): return True
+
         self.assertTrue(self.breaker.call(func))
         self.assertEqual(0, self.breaker.fail_counter)
         self.assertEqual('closed', self.breaker.current_state)
@@ -30,7 +40,9 @@ class CircuitBreakerStorageBasedTestCase(object):
         """CircuitBreaker: it should keep the circuit closed after a few
         failures.
         """
+
         def func(): raise NotImplementedError()
+
         self.assertRaises(NotImplementedError, self.breaker.call, func)
         self.assertEqual(1, self.breaker.fail_counter)
         self.assertEqual('closed', self.breaker.current_state)
@@ -39,7 +51,9 @@ class CircuitBreakerStorageBasedTestCase(object):
         """CircuitBreaker: it should keep the circuit closed after few mixed
         outcomes.
         """
+
         def suc(): return True
+
         def err(): raise NotImplementedError()
 
         self.assertRaises(NotImplementedError, self.breaker.call, err)
@@ -53,6 +67,7 @@ class CircuitBreakerStorageBasedTestCase(object):
         """CircuitBreaker: it should open the circuit after many failures.
         """
         self.breaker = CircuitBreaker(fail_max=3, **self.breaker_kwargs)
+
         def func(): raise NotImplementedError()
 
         self.assertRaises(NotImplementedError, self.breaker.call, func)
@@ -67,7 +82,9 @@ class CircuitBreakerStorageBasedTestCase(object):
         """CircuitBreaker: it should open the circuit after many failures.
         """
         self.breaker = CircuitBreaker(fail_max=3, **self.breaker_kwargs)
-        def func(): raise NotImplementedError()
+
+        def func():
+            raise NotImplementedError()
 
         self.assertRaises(NotImplementedError, self.breaker.call, func)
         self.assertRaises(NotImplementedError, self.breaker.call, func)
@@ -86,6 +103,7 @@ class CircuitBreakerStorageBasedTestCase(object):
         """CircuitBreaker: it should half-open the circuit after timeout.
         """
         self.breaker = CircuitBreaker(fail_max=3, reset_timeout=0.5, **self.breaker_kwargs)
+
         def func(): raise NotImplementedError()
 
         self.assertRaises(NotImplementedError, self.breaker.call, func)
@@ -111,6 +129,7 @@ class CircuitBreakerStorageBasedTestCase(object):
         self.breaker = CircuitBreaker(fail_max=3, reset_timeout=1, **self.breaker_kwargs)
 
         suc = mock.MagicMock(return_value=True)
+
         def err(): raise NotImplementedError()
 
         self.assertRaises(NotImplementedError, self.breaker.call, err)
@@ -135,6 +154,7 @@ class CircuitBreakerStorageBasedTestCase(object):
         """CircuitBreaker: it should open the circuit when a call fails in
         half-open state.
         """
+
         def fun(): raise NotImplementedError()
 
         self.breaker.half_open()
@@ -150,6 +170,7 @@ class CircuitBreakerStorageBasedTestCase(object):
         """CircuitBreaker: it should close the circuit when a call succeeds in
         half-open state.
         """
+
         def fun(): return True
 
         self.breaker.half_open()
@@ -165,6 +186,7 @@ class CircuitBreakerStorageBasedTestCase(object):
         """CircuitBreaker: it should allow the circuit to be closed manually.
         """
         self.breaker = CircuitBreaker(fail_max=3, **self.breaker_kwargs)
+
         def func(): raise NotImplementedError()
 
         self.assertRaises(NotImplementedError, self.breaker.call, func)
@@ -185,6 +207,7 @@ class CircuitBreakerStorageBasedTestCase(object):
         """CircuitBreaker: it should call the appropriate functions on every
         state transition.
         """
+
         class Listener(CircuitBreakerListener):
             def __init__(self):
                 self.out = ''
@@ -218,19 +241,24 @@ class CircuitBreakerStorageBasedTestCase(object):
         self.out = ''
 
         def suc(): return True
+
         def err(): raise NotImplementedError()
 
         class Listener(CircuitBreakerListener):
             def __init__(self):
                 self.out = ''
+
             def before_call(self, cb, func, *args, **kwargs):
                 assert cb
                 self.out += '-'
+
             def success(self, cb):
                 assert cb
                 self.out += 'success'
+
             def failure(self, cb, exc):
-                assert cb; assert exc
+                assert cb
+                assert exc
                 self.out += 'failure'
 
         listener = Listener()
@@ -241,8 +269,10 @@ class CircuitBreakerStorageBasedTestCase(object):
         self.assertEqual('-success-failure', listener.out)
 
     def test_generator(self):
-        """CircuitBreaker: it should inspect generator values.
         """
+        it should inspect generator values.
+        """
+
         @self.breaker
         def suc(value):
             "Docstring"
@@ -343,25 +373,32 @@ class CircuitBreakerConfigurationTestCase(object):
     def test_call_with_no_args(self):
         """CircuitBreaker: it should be able to invoke functions with no-args.
         """
+
         def func(): return True
+
         self.assertTrue(self.breaker.call(func))
 
     def test_call_with_args(self):
         """CircuitBreaker: it should be able to invoke functions with args.
         """
+
         def func(arg1, arg2): return [arg1, arg2]
+
         self.assertEqual([42, 'abc'], self.breaker.call(func, 42, 'abc'))
 
     def test_call_with_kwargs(self):
         """CircuitBreaker: it should be able to invoke functions with kwargs.
         """
+
         def func(**kwargs): return kwargs
-        self.assertEqual({'a':1, 'b':2}, self.breaker.call(func, a=1, b=2))
+
+        self.assertEqual({'a': 1, 'b': 2}, self.breaker.call(func, a=1, b=2))
 
     @testing.gen_test
     def test_call_async_with_no_args(self):
         """CircuitBreaker: it should be able to invoke async functions with no-args.
         """
+
         @gen.coroutine
         def func(): return True
 
@@ -372,6 +409,7 @@ class CircuitBreakerConfigurationTestCase(object):
     def test_call_async_with_args(self):
         """CircuitBreaker: it should be able to invoke async functions with args.
         """
+
         @gen.coroutine
         def func(arg1, arg2): return [arg1, arg2]
 
@@ -382,10 +420,12 @@ class CircuitBreakerConfigurationTestCase(object):
     def test_call_async_with_kwargs(self):
         """CircuitBreaker: it should be able to invoke async functions with kwargs.
         """
+
         @gen.coroutine
         def func(**kwargs): return kwargs
+
         ret = yield self.breaker.call(func, a=1, b=2)
-        self.assertEqual({'a':1, 'b':2}, ret)
+        self.assertEqual({'a': 1, 'b': 2}, ret)
 
     def test_add_listener(self):
         """CircuitBreaker: it should allow the user to add a listener at a
@@ -425,7 +465,9 @@ class CircuitBreakerConfigurationTestCase(object):
         self.breaker = CircuitBreaker(exclude=[LookupError])
 
         def err_1(): raise NotImplementedError()
+
         def err_2(): raise LookupError()
+
         def err_3(): raise KeyError()
 
         self.assertRaises(NotImplementedError, self.breaker.call, err_1)
@@ -479,6 +521,7 @@ class CircuitBreakerConfigurationTestCase(object):
     def test_decorator(self):
         """CircuitBreaker: it should be a decorator.
         """
+
         @self.breaker
         def suc(value):
             "Docstring"
@@ -504,6 +547,7 @@ class CircuitBreakerConfigurationTestCase(object):
     def test_decorator_call_future(self):
         """CircuitBreaker: it should be a decorator.
         """
+
         @self.breaker(__pybreaker_call_async=True)
         @gen.coroutine
         def suc(value):
@@ -534,6 +578,7 @@ class CircuitBreakerConfigurationTestCase(object):
     def test_no_tornado_raises(self):
         with self.assertRaises(ImportError):
             def func(): return True
+
             self.breaker(func, __pybreaker_call_async=True)
 
     def test_name(self):
@@ -549,7 +594,8 @@ class CircuitBreakerConfigurationTestCase(object):
         self.assertEqual(self.breaker.name, name)
 
 
-class CircuitBreakerTestCase(testing.AsyncTestCase, CircuitBreakerStorageBasedTestCase, CircuitBreakerConfigurationTestCase):
+class CircuitBreakerTestCase(testing.AsyncTestCase, CircuitBreakerStorageBasedTestCase,
+                             CircuitBreakerConfigurationTestCase):
     """
     Tests for the CircuitBreaker class.
     """
@@ -587,10 +633,6 @@ class CircuitBreakerTestCase(testing.AsyncTestCase, CircuitBreakerStorageBasedTe
             self.assertEqual(breaker.fail_counter, 1)
 
 
-import fakeredis
-import logging
-from redis.exceptions import RedisError
-
 class CircuitBreakerRedisTestCase(unittest.TestCase, CircuitBreakerStorageBasedTestCase):
     """
     Tests for the CircuitBreaker class.
@@ -610,6 +652,7 @@ class CircuitBreakerRedisTestCase(unittest.TestCase, CircuitBreakerStorageBasedT
         self.breaker = CircuitBreaker(**self.breaker_kwargs)
 
         def func(): raise NotImplementedError()
+
         self.assertRaises(NotImplementedError, self.breaker.call, func)
         keys = self.redis.keys()
         self.assertEqual(2, len(keys))
@@ -619,9 +662,12 @@ class CircuitBreakerRedisTestCase(unittest.TestCase, CircuitBreakerStorageBasedT
     def test_fallback_state(self):
         logger = logging.getLogger('pybreaker')
         logger.setLevel(logging.FATAL)
-        self.breaker_kwargs = {'state_storage': CircuitRedisStorage('closed', self.redis, fallback_circuit_state='open')}
+        self.breaker_kwargs = {
+            'state_storage': CircuitRedisStorage('closed', self.redis, fallback_circuit_state='open')}
         self.breaker = CircuitBreaker(**self.breaker_kwargs)
+
         def func(k): raise RedisError()
+
         with mock.patch.object(self.redis, 'get', new=func):
             state = self.breaker.state
             self.assertEqual('open', state.name)
@@ -630,10 +676,12 @@ class CircuitBreakerRedisTestCase(unittest.TestCase, CircuitBreakerStorageBasedT
         """CircuitBreakerRedis: If state on Redis is missing, it should set the
         fallback circuit state and reset the fail counter to 0.
         """
-        self.breaker_kwargs = {'state_storage': CircuitRedisStorage('closed', self.redis, fallback_circuit_state='open')}
+        self.breaker_kwargs = {
+            'state_storage': CircuitRedisStorage('closed', self.redis, fallback_circuit_state='open')}
         self.breaker = CircuitBreaker(**self.breaker_kwargs)
 
         def func(): raise NotImplementedError()
+
         self.assertRaises(NotImplementedError, self.breaker.call, func)
         self.assertEqual(1, self.breaker.fail_counter)
 
@@ -642,10 +690,6 @@ class CircuitBreakerRedisTestCase(unittest.TestCase, CircuitBreakerStorageBasedT
             self.assertEqual('open', state.name)
             self.assertEqual(0, self.breaker.fail_counter)
 
-
-
-import threading
-from types import MethodType
 
 class CircuitBreakerThreadsTestCase(unittest.TestCase):
     """
@@ -673,17 +717,21 @@ class CircuitBreakerThreadsTestCase(unittest.TestCase):
         """CircuitBreaker: it should compute a failed call atomically to
         avoid race conditions.
         """
+
         # Create a specific exception to avoid masking other errors
         class SpecificException(Exception):
             pass
 
         @self.breaker
-        def err(): raise SpecificException()
+        def err():
+            raise SpecificException()
 
         def trigger_error():
             for n in range(500):
-                try: err()
-                except SpecificException: pass
+                try:
+                    err()
+                except SpecificException:
+                    pass
 
         def _inc_counter(self):
             c = self._state_storage._fail_counter
@@ -698,8 +746,10 @@ class CircuitBreakerThreadsTestCase(unittest.TestCase):
         """CircuitBreaker: it should compute a successful call atomically
         to avoid race conditions.
         """
+
         @self.breaker
-        def suc(): return True
+        def suc():
+            return True
 
         def trigger_success():
             for n in range(500):
@@ -727,11 +777,14 @@ class CircuitBreakerThreadsTestCase(unittest.TestCase):
         sleep(0.01)
 
         @self.breaker
-        def err(): raise Exception()
+        def err():
+            raise Exception()
 
         def trigger_failure():
-            try: err()
-            except: pass
+            try:
+                err()
+            except:
+                pass
 
         class StateListener(CircuitBreakerListener):
             def __init__(self):
@@ -750,18 +803,21 @@ class CircuitBreakerThreadsTestCase(unittest.TestCase):
         self._start_threads(trigger_failure, 5)
         self.assertEqual(1, state_listener._count)
 
-
     def test_fail_max_thread_safety(self):
         """CircuitBreaker: it should not allow more failed calls than
         'fail_max' setting.
         """
+
         @self.breaker
-        def err(): raise Exception()
+        def err():
+            raise Exception()
 
         def trigger_error():
             for i in range(2000):
-                try: err()
-                except: pass
+                try:
+                    err()
+                except:
+                    pass
 
         class SleepListener(CircuitBreakerListener):
             def before_call(self, cb, func, *args, **kwargs):
@@ -780,7 +836,8 @@ class CircuitBreakerRedisConcurrencyTestCase(unittest.TestCase):
 
     def setUp(self):
         self.redis = fakeredis.FakeStrictRedis()
-        self.breaker_kwargs = {'fail_max': 3000, 'reset_timeout': 1,'state_storage': CircuitRedisStorage('closed', self.redis)}
+        self.breaker_kwargs = {'fail_max': 3000, 'reset_timeout': 1,
+                               'state_storage': CircuitRedisStorage('closed', self.redis)}
         self.breaker = CircuitBreaker(**self.breaker_kwargs)
 
     def tearDown(self):
@@ -804,17 +861,21 @@ class CircuitBreakerRedisConcurrencyTestCase(unittest.TestCase):
         """CircuitBreaker: it should compute a failed call atomically to
         avoid race conditions.
         """
+
         # Create a specific exception to avoid masking other errors
         class SpecificException(Exception):
             pass
 
         @self.breaker
-        def err(): raise SpecificException()
+        def err():
+            raise SpecificException()
 
         def trigger_error():
             for n in range(500):
-                try: err()
-                except SpecificException: pass
+                try:
+                    err()
+                except SpecificException:
+                    pass
 
         def _inc_counter(self):
             sleep(0.00005)
@@ -828,8 +889,10 @@ class CircuitBreakerRedisConcurrencyTestCase(unittest.TestCase):
         """CircuitBreaker: it should compute a successful call atomically
         to avoid race conditions.
         """
+
         @self.breaker
-        def suc(): return True
+        def suc():
+            return True
 
         def trigger_success():
             for n in range(500):
@@ -857,11 +920,14 @@ class CircuitBreakerRedisConcurrencyTestCase(unittest.TestCase):
         sleep(0.01)
 
         @self.breaker
-        def err(): raise Exception()
+        def err():
+            raise Exception()
 
         def trigger_failure():
-            try: err()
-            except: pass
+            try:
+                err()
+            except:
+                pass
 
         class StateListener(CircuitBreakerListener):
             def __init__(self):
@@ -880,7 +946,6 @@ class CircuitBreakerRedisConcurrencyTestCase(unittest.TestCase):
         self._start_threads(trigger_failure, 5)
         self.assertEqual(1, state_listener._count)
 
-
     def test_fail_max_thread_safety(self):
         """CircuitBreaker: it should not allow more failed calls than 'fail_max'
         setting. Note that with Redis, where we have separate systems
@@ -889,13 +954,17 @@ class CircuitBreakerRedisConcurrencyTestCase(unittest.TestCase):
         prevent this, we'd need to take out a lock amongst all systems before
         trying the call.
         """
+
         @self.breaker
-        def err(): raise Exception()
+        def err():
+            raise Exception()
 
         def trigger_error():
             for i in range(2000):
-                try: err()
-                except: pass
+                try:
+                    err()
+                except:
+                    pass
 
         class SleepListener(CircuitBreakerListener):
             def before_call(self, cb, func, *args, **kwargs):
