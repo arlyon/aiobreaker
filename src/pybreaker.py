@@ -16,7 +16,8 @@ import types
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from functools import wraps
-from typing import Callable, Optional
+from threading import RLock
+from typing import Callable, Tuple, Optional, Iterable
 
 try:
     from redis.exceptions import RedisError
@@ -47,19 +48,22 @@ class CircuitBreaker:
     This pattern is described by Michael T. Nygard in his book 'Release It!'.
     """
 
-    def __init__(self, fail_max=5, reset_timeout=60, exclude=None,
-                 listeners=None, state_storage=None, name=None):
+    def __init__(self, fail_max=5, reset_timeout=60,
+                 exclude: Optional[Iterable[type]] = None,
+                 listeners: Optional[Iterable['CircuitBreakerListener']] = None,
+                 state_storage: Optional['CircuitBreakerStorage'] = None,
+                 name: Optional[str] = None):
         """
         Creates a new circuit breaker with the given parameters.
         """
-        self._lock = threading.RLock()
+        self._lock = RLock()
         self._state_storage = state_storage or CircuitMemoryStorage(STATE_CLOSED)
         self._state = self._create_new_state(self.current_state)
 
         self._fail_max = fail_max
         self._reset_timeout = reset_timeout
 
-        self._excluded_exceptions = list(exclude or [])
+        self._excluded_exception_types = list(exclude or [])
         self._listeners = list(listeners or [])
         self._name = name
 
@@ -73,16 +77,14 @@ class CircuitBreaker:
     @property
     def fail_max(self):
         """
-        Returns the maximum number of failures tolerated before the circuit is
-        opened.
+        Returns the maximum number of failures tolerated before the circuit is opened.
         """
         return self._fail_max
 
     @fail_max.setter
     def fail_max(self, number):
         """
-        Sets the maximum `number` of failures tolerated before the circuit is
-        opened.
+        Sets the maximum `number` of failures tolerated before the circuit is opened.
         """
         self._fail_max = number
 
@@ -102,7 +104,7 @@ class CircuitBreaker:
         """
         self._reset_timeout = timeout
 
-    def _create_new_state(self, new_state, prev_state=None, notify=False):
+    def _create_new_state(self, new_state: str, prev_state=None, notify=False) -> 'CircuitBreakerState':
         """
         Return state object from state string, i.e.,
         'closed' -> <CircuitClosedState>
@@ -112,9 +114,9 @@ class CircuitBreaker:
             STATE_OPEN: CircuitOpenState,
             STATE_HALF_OPEN: CircuitHalfOpenState,
         }
+
         try:
-            cls = state_map[new_state]
-            return cls(self, prev_state=prev_state, notify=notify)
+            return state_map[new_state](self, prev_state=prev_state, notify=notify)
         except KeyError:
             msg = "Unknown state {!r}, valid states: {}"
             raise ValueError(msg.format(new_state, ', '.join(state_map)))
@@ -151,19 +153,19 @@ class CircuitBreaker:
         return self._state_storage.state
 
     @property
-    def excluded_exceptions(self):
+    def excluded_exceptions(self) -> Tuple[type]:
         """
-        Returns the list of excluded exceptions, e.g., exceptions that should
+        Returns a tuple of the excluded exceptions, e.g., exceptions that should
         not be considered system errors by this circuit breaker.
         """
-        return tuple(self._excluded_exceptions)
+        return tuple(self._excluded_exception_types)
 
-    def add_excluded_exception(self, exception):
+    def add_excluded_exception(self, exception: type):
         """
         Adds an exception to the list of excluded exceptions.
         """
         with self._lock:
-            self._excluded_exceptions.append(exception)
+            self._excluded_exception_types.append(exception)
 
     def add_excluded_exceptions(self, *exceptions):
         """
@@ -172,12 +174,12 @@ class CircuitBreaker:
         for exc in exceptions:
             self.add_excluded_exception(exc)
 
-    def remove_excluded_exception(self, exception):
+    def remove_excluded_exception(self, exception: type):
         """
         Removes an exception from the list of excluded exceptions.
         """
         with self._lock:
-            self._excluded_exceptions.remove(exception)
+            self._excluded_exception_types.remove(exception)
 
     def _inc_counter(self):
         """
@@ -185,17 +187,17 @@ class CircuitBreaker:
         """
         self._state_storage.increment_counter()
 
-    def is_system_error(self, exception):
+    def is_system_error(self, exception: Exception):
         """
-        Returns whether the exception `exception` is considered a signal of
+        Returns whether the exception 'exception' is considered a signal of
         system malfunction. Business exceptions should not cause this circuit
         breaker to open.
+
+        It does this by making sure the given exception is not a subclass
+        of the excluded exceptions.
         """
-        texc = type(exception)
-        for exc in self._excluded_exceptions:
-            if issubclass(texc, exc):
-                return False
-        return True
+        exception_type = type(exception)
+        return not issubclass(exception_type, tuple(self._excluded_exception_types))
 
     def call(self, func, *args, **kwargs):
         """
@@ -205,6 +207,9 @@ class CircuitBreaker:
         with self._lock:
             return self.state.call(func, *args, **kwargs)
 
+    async def call_async(self, func, *args, **kwargs):
+        with self._lock:
+            return await self.state.call_async(func, *args, **kwargs)
 
     def open(self):
         """
@@ -237,9 +242,16 @@ class CircuitBreaker:
         """
 
         def _outer_wrapper(func):
+
             @wraps(func)
             def _inner_wrapper(*args, **kwargs):
                 return self.call(func, *args, **kwargs)
+
+            @wraps(func)
+            async def _inner_wrapper_async(*args, **kwargs):
+                return await self.call_async(func, *args, **kwargs)
+
+            return _inner_wrapper_async if inspect.iscoroutinefunction(func) else _inner_wrapper
 
         if call_args:
             return _outer_wrapper(*call_args)
@@ -640,15 +652,28 @@ class CircuitBreakerState:
             ret = func(*args, **kwargs)
             if isinstance(ret, types.GeneratorType):
                 return self.generator_call(ret)
-
-        except BaseException as e:
+        except Exception as e:
             self._handle_error(e)
         else:
             self._handle_success()
         return ret
 
+    async def call_async(self, func, *args, **kwargs):
 
+        ret = None
+        self.before_call(func, *args, **kwargs)
+        for listener in self._breaker.listeners:
+            listener.before_call(self._breaker, func, *args, **kwargs)
 
+        try:
+            ret = await func(*args, **kwargs)
+            if isinstance(ret, types.GeneratorType):
+                return self.generator_call(ret)
+        except Exception as e:
+            self._handle_error(e)
+        else:
+            self._handle_success()
+        return ret
 
     def generator_call(self, wrapped_generator):
         try:
@@ -657,8 +682,8 @@ class CircuitBreakerState:
                 value = yield wrapped_generator.send(value)
         except StopIteration:
             self._handle_success()
-            raise
-        except BaseException as e:
+            return
+        except Exception as e:
             self._handle_error(e)
 
     def before_call(self, func, *args, **kwargs):
