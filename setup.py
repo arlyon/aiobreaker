@@ -28,5 +28,5 @@ setup(
     include_package_data=True,
     zip_safe=False,
     test_suite='tests',
-    tests_require=['redis', 'fakeredis', 'aiounittest'],
+    tests_require=['redis', 'fakeredis', 'pytest', 'pytest-asyncio']
 )
