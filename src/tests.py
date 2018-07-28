@@ -1,5 +1,5 @@
 # -*- coding:utf-8 -*-
-
+from functools import partial
 from time import sleep
 
 import fakeredis
@@ -985,9 +985,6 @@ class CircuitBreakerThreadsTestCase(TestCase):
     Tests to reproduce common synchronization errors on CircuitBreaker class.
     """
 
-    def setUp(self):
-        self.breaker = CircuitBreaker(fail_max=3000, reset_timeout=1)
-
     @staticmethod
     def _start_threads(target, n):
         """
@@ -1001,22 +998,18 @@ class CircuitBreakerThreadsTestCase(TestCase):
         for t in threads:
             t.join()
 
-    def _mock_function(self, obj, func):
-        """
-        Replaces a bounded function in `self.breaker` by another.
-        """
-        setattr(obj, func.__name__, MethodType(func, self.breaker))
-
     def test_fail_thread_safety(self):
-        """CircuitBreaker: it should compute a failed call atomically to
-        avoid race conditions.
+        """
+        It should compute a failed call atomically to avoid race conditions.
         """
 
         # Create a specific exception to avoid masking other errors
         class SpecificException(Exception):
             pass
 
-        @self.breaker
+        breaker = CircuitBreaker(fail_max=3000, reset_timeout=timedelta(seconds=1))
+
+        @breaker
         def err():
             raise SpecificException()
 
@@ -1027,21 +1020,21 @@ class CircuitBreakerThreadsTestCase(TestCase):
                 except SpecificException:
                     pass
 
-        def _inc_counter(breaker):
+        def _inc_counter():
             c = breaker._state_storage._fail_counter
             sleep(0.00005)
             breaker._state_storage._fail_counter = c + 1
 
-        self._mock_function(self.breaker, _inc_counter)
+        breaker._inc_counter = _inc_counter
         self._start_threads(trigger_error, 3)
-        self.assertEqual(1500, self.breaker.fail_counter)
+        self.assertEqual(1500, breaker.fail_counter)
 
     def test_success_thread_safety(self):
-        """CircuitBreaker: it should compute a successful call atomically
-        to avoid race conditions.
-        """
+        """It should compute a successful call atomically to avoid race conditions."""
 
-        @self.breaker
+        breaker = CircuitBreaker(fail_max=3000, reset_timeout=timedelta(seconds=1))
+
+        @breaker
         def suc():
             return True
 
@@ -1057,20 +1050,19 @@ class CircuitBreakerThreadsTestCase(TestCase):
                 sleep(0.00005)
                 breaker._success_counter = c + 1
 
-        self.breaker.add_listener(SuccessListener())
+        breaker.add_listener(SuccessListener())
         self._start_threads(trigger_success, 3)
-        self.assertEqual(1500, self.breaker._success_counter)
+        self.assertEqual(1500, breaker._success_counter)
 
     def test_half_open_thread_safety(self):
-        """CircuitBreaker: it should allow only one trial call when the
-        circuit is half-open.
-        """
-        self.breaker = CircuitBreaker(fail_max=1, reset_timeout=0.01)
+        """It should allow only one trial call when the circuit is half-open."""
 
-        self.breaker.open()
+        breaker = CircuitBreaker(fail_max=1, reset_timeout=timedelta(seconds=0.01))
+
+        breaker.open()
         sleep(0.01)
 
-        @self.breaker
+        @breaker
         def err():
             raise DummyException()
 
@@ -1086,25 +1078,24 @@ class CircuitBreakerThreadsTestCase(TestCase):
             def __init__(self):
                 self._count = 0
 
-            def before_call(self, breaker, fun, *args, **kwargs):
+            def before_call(self, breaker, func, *args, **kwargs):
                 sleep(0.00005)
 
             def state_change(self, breaker, old, new):
-                if new.name == 'half-open':
+                if new.name == STATE_HALF_OPEN:
                     self._count += 1
 
         state_listener = StateListener()
-        self.breaker.add_listener(state_listener)
+        breaker.add_listener(state_listener)
 
         self._start_threads(trigger_failure, 5)
         self.assertEqual(1, state_listener._count)
 
     def test_fail_max_thread_safety(self):
-        """CircuitBreaker: it should not allow more failed calls than
-        'fail_max' setting.
-        """
+        """It should not allow more failed calls than 'fail_max' setting."""
+        breaker = CircuitBreaker()
 
-        @self.breaker
+        @breaker
         def err():
             raise DummyException()
 
@@ -1121,9 +1112,9 @@ class CircuitBreakerThreadsTestCase(TestCase):
             def before_call(self, breaker, func, *args, **kwargs):
                 sleep(0.00005)
 
-        self.breaker.add_listener(SleepListener())
+        breaker.add_listener(SleepListener())
         self._start_threads(trigger_error, 3)
-        self.assertEqual(self.breaker.fail_max, self.breaker.fail_counter)
+        self.assertEqual(breaker.fail_max, breaker.fail_counter)
 
 
 class CircuitBreakerRedisConcurrencyTestCase(TestCase):
@@ -1260,7 +1251,9 @@ class CircuitBreakerRedisConcurrencyTestCase(TestCase):
         trying the call.
         """
 
-        @self.breaker
+        breaker = CircuitBreaker()
+
+        @breaker
         def err():
             raise DummyException()
 
@@ -1277,10 +1270,10 @@ class CircuitBreakerRedisConcurrencyTestCase(TestCase):
             def before_call(self, breaker, func, *args, **kwargs):
                 sleep(0.00005)
 
-        self.breaker.add_listener(SleepListener())
+        breaker.add_listener(SleepListener())
         num_threads = 3
         self._start_threads(trigger_error, num_threads)
-        self.assertTrue(self.breaker.fail_counter < self.breaker.fail_max + num_threads)
+        self.assertTrue(breaker.fail_counter < breaker.fail_max + num_threads)
 
 
 if __name__ == "__main__":
