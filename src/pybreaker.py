@@ -48,7 +48,7 @@ class CircuitBreaker:
     This pattern is described by Michael T. Nygard in his book 'Release It!'.
     """
 
-    def __init__(self, fail_max=5, reset_timeout=60,
+    def __init__(self, fail_max=5, reset_timeout=timedelta(seconds=60),
                  exclude: Optional[Iterable[type]] = None,
                  listeners: Optional[Iterable['CircuitBreakerListener']] = None,
                  state_storage: Optional['CircuitBreakerStorage'] = None,
@@ -97,7 +97,7 @@ class CircuitBreaker:
         return self._reset_timeout
 
     @reset_timeout.setter
-    def reset_timeout(self, timeout):
+    def reset_timeout(self, timeout: datetime):
         """
         Sets the `timeout` period, in seconds, this circuit breaker should be
         kept open.
@@ -769,7 +769,7 @@ class CircuitOpenState(CircuitBreakerState):
         state; otherwise, raises ``CircuitBreakerError`` without any attempt
         to execute the real operation.
         """
-        timeout = timedelta(seconds=self._breaker.reset_timeout)
+        timeout = self._breaker.reset_timeout
         opened_at = self._breaker._state_storage.opened_at
         if opened_at and datetime.utcnow() < opened_at + timeout:
             error_msg = 'Timeout not elapsed yet, circuit breaker still open'

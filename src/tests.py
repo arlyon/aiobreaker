@@ -6,6 +6,7 @@ import fakeredis
 import logging
 import threading
 from abc import ABC, abstractmethod
+from datetime import timedelta
 from redis.exceptions import RedisError
 from types import MethodType
 from typing import Dict
@@ -115,7 +116,7 @@ class BaseTestCases:
         def test_failed_call_after_timeout(self):
             """CircuitBreaker: it should half-open the circuit after timeout.
             """
-            breaker = CircuitBreaker(fail_max=3, reset_timeout=0.5, **self.breaker_kwargs)
+            breaker = CircuitBreaker(fail_max=3, reset_timeout=timedelta(seconds=0.5), **self.breaker_kwargs)
 
             def func():
                 raise DummyException()
@@ -140,7 +141,7 @@ class BaseTestCases:
             """CircuitBreaker: it should close the circuit when a call succeeds
             after timeout. The successful function should only be called once.
             """
-            breaker = CircuitBreaker(fail_max=3, reset_timeout=1, **self.breaker_kwargs)
+            breaker = CircuitBreaker(fail_max=3, reset_timeout=timedelta(seconds=1), **self.breaker_kwargs)
 
             suc = MagicMock(return_value=True)
 
@@ -399,7 +400,7 @@ class BaseTestCases:
         async def test_failed_call_after_timeout_async(self):
             """CircuitBreaker: it should half-open the circuit after timeout.
             """
-            breaker = CircuitBreaker(fail_max=3, reset_timeout=0.5, **self.breaker_kwargs)
+            breaker = CircuitBreaker(fail_max=3, reset_timeout=timedelta(seconds=0.5), **self.breaker_kwargs)
 
             async def func():
                 raise DummyException()
@@ -433,11 +434,12 @@ class BaseTestCases:
             It should close the circuit when a call succeeds after timeout.
             The successful function should only be called once.
             """
-            breaker = CircuitBreaker(fail_max=3, reset_timeout=1, **self.breaker_kwargs)
+            breaker = CircuitBreaker(fail_max=3, reset_timeout=timedelta(seconds=1), **self.breaker_kwargs)
 
             async def suc():
                 suc.call_count += 1
                 return True
+
             suc.call_count = 0
 
             async def err():
@@ -556,7 +558,7 @@ class BaseTestCases:
             breaker = CircuitBreaker()
 
             self.assertEqual(0, breaker.fail_counter)
-            self.assertEqual(60, breaker.reset_timeout)
+            self.assertEqual(timedelta(seconds=60), breaker.reset_timeout)
             self.assertEqual(5, breaker.fail_max)
             self.assertEqual(STATE_CLOSED, breaker.current_state)
             self.assertEqual((), breaker.excluded_exceptions)
@@ -567,10 +569,10 @@ class BaseTestCases:
             """
             it should support a custom reset timeout value.
             """
-            breaker = CircuitBreaker(reset_timeout=30)
+            breaker = CircuitBreaker(reset_timeout=timedelta(seconds=30))
 
             self.assertEqual(0, breaker.fail_counter)
-            self.assertEqual(30, breaker.reset_timeout)
+            self.assertEqual(timedelta(seconds=30), breaker.reset_timeout)
             self.assertEqual(5, breaker.fail_max)
             self.assertEqual((), breaker.excluded_exceptions)
             self.assertEqual((), breaker.listeners)
@@ -580,25 +582,25 @@ class BaseTestCases:
             """CircuitBreaker: it should support a custom maximum number of
             failures.
             """
-            self.breaker = CircuitBreaker(fail_max=10)
-            self.assertEqual(0, self.breaker.fail_counter)
-            self.assertEqual(60, self.breaker.reset_timeout)
-            self.assertEqual(10, self.breaker.fail_max)
-            self.assertEqual((), self.breaker.excluded_exceptions)
-            self.assertEqual((), self.breaker.listeners)
-            self.assertEqual('memory', self.breaker._state_storage.name)
+            breaker = CircuitBreaker(fail_max=10)
+            self.assertEqual(0, breaker.fail_counter)
+            self.assertEqual(timedelta(seconds=60), breaker.reset_timeout)
+            self.assertEqual(10, breaker.fail_max)
+            self.assertEqual((), breaker.excluded_exceptions)
+            self.assertEqual((), breaker.listeners)
+            self.assertEqual('memory', breaker._state_storage.name)
 
         def test_new_with_custom_excluded_exceptions(self):
             """CircuitBreaker: it should support a custom list of excluded
             exceptions.
             """
-            self.breaker = CircuitBreaker(exclude=[Exception])
-            self.assertEqual(0, self.breaker.fail_counter)
-            self.assertEqual(60, self.breaker.reset_timeout)
-            self.assertEqual(5, self.breaker.fail_max)
-            self.assertEqual((Exception,), self.breaker.excluded_exceptions)
-            self.assertEqual((), self.breaker.listeners)
-            self.assertEqual('memory', self.breaker._state_storage.name)
+            breaker = CircuitBreaker(exclude=[Exception])
+            self.assertEqual(0, breaker.fail_counter)
+            self.assertEqual(timedelta(seconds=60), breaker.reset_timeout)
+            self.assertEqual(5, breaker.fail_max)
+            self.assertEqual((Exception,), breaker.excluded_exceptions)
+            self.assertEqual((), breaker.listeners)
+            self.assertEqual('memory', breaker._state_storage.name)
 
         def test_fail_max_setter(self):
             """CircuitBreaker: it should allow the user to set a new value for
@@ -616,9 +618,9 @@ class BaseTestCases:
             """
             breaker = CircuitBreaker()
 
-            self.assertEqual(60, breaker.reset_timeout)
-            breaker.reset_timeout = 30
-            self.assertEqual(30, breaker.reset_timeout)
+            self.assertEqual(timedelta(seconds=60), breaker.reset_timeout)
+            breaker.reset_timeout = timedelta(seconds=30)
+            self.assertEqual(timedelta(seconds=30), breaker.reset_timeout)
 
         def test_call_with_no_args(self):
             """
@@ -1215,7 +1217,7 @@ class CircuitBreakerRedisConcurrencyTestCase(TestCase):
         """
         it should allow only one trial call when the circuit is half-open.
         """
-        breaker = CircuitBreaker(fail_max=1, reset_timeout=0.01)
+        breaker = CircuitBreaker(fail_max=1, reset_timeout=timedelta(seconds=0.01))
 
         breaker.open()
         sleep(0.01)
