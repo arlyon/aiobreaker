@@ -170,7 +170,7 @@ class BaseTestCases:
             half-open state.
             """
 
-            def fun():
+            def func():
                 raise DummyException()
 
             breaker = CircuitBreaker()
@@ -180,7 +180,7 @@ class BaseTestCases:
             self.assertEqual('half-open', breaker.current_state)
 
             # Circuit should open
-            self.assertRaises(CircuitBreakerError, breaker.call, fun)
+            self.assertRaises(CircuitBreakerError, breaker.call, func)
             self.assertEqual(1, breaker.fail_counter)
             self.assertEqual('open', breaker.current_state)
 
@@ -189,7 +189,7 @@ class BaseTestCases:
             half-open state.
             """
 
-            def fun():
+            def func():
                 return True
 
             breaker = CircuitBreaker()
@@ -198,7 +198,7 @@ class BaseTestCases:
             self.assertEqual('half-open', breaker.current_state)
 
             # Circuit should open
-            self.assertTrue(breaker.call(fun))
+            self.assertTrue(breaker.call(func))
             self.assertEqual(0, breaker.fail_counter)
             self.assertEqual('closed', breaker.current_state)
 
@@ -476,7 +476,7 @@ class BaseTestCases:
             It should open the circuit when a call fails in half-open state.
             """
 
-            async def fun():
+            async def func():
                 raise DummyException()
 
             breaker = CircuitBreaker()
@@ -487,7 +487,7 @@ class BaseTestCases:
 
             # Circuit should open
             with self.assertRaises(CircuitBreakerError):
-                await breaker.call_async(fun)
+                await breaker.call_async(func)
 
             self.assertEqual(1, breaker.fail_counter)
             self.assertEqual('open', breaker.current_state)
@@ -497,7 +497,7 @@ class BaseTestCases:
             It should close the circuit when a call succeeds in half-open state.
             """
 
-            async def fun():
+            async def func():
                 return True
 
             breaker = CircuitBreaker()
@@ -506,7 +506,7 @@ class BaseTestCases:
             self.assertEqual('half-open', breaker.current_state)
 
             # Circuit should open
-            self.assertTrue(await breaker.call_async(fun))
+            self.assertTrue(await breaker.call_async(func))
             self.assertEqual(0, breaker.fail_counter)
             self.assertEqual('closed', breaker.current_state)
 
@@ -1238,7 +1238,7 @@ class CircuitBreakerRedisConcurrencyTestCase(TestCase):
             def __init__(self):
                 self._count = 0
 
-            def before_call(self, breaker, fun, *args, **kwargs):
+            def before_call(self, breaker, func, *args, **kwargs):
                 sleep(0.00005)
 
             def state_change(self, breaker, old, new):
