@@ -1002,22 +1002,17 @@ class CircuitBreakerThreadsTestCase(TestCase):
         """
         It should compute a failed call atomically to avoid race conditions.
         """
-
-        # Create a specific exception to avoid masking other errors
-        class SpecificException(Exception):
-            pass
-
         breaker = CircuitBreaker(fail_max=3000, reset_timeout=timedelta(seconds=1))
 
         @breaker
         def err():
-            raise SpecificException()
+            raise DummyException()
 
         def trigger_error():
             for n in range(500):
                 try:
                     err()
-                except SpecificException:
+                except DummyException:
                     pass
 
         def _inc_counter():
