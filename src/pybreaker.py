@@ -48,7 +48,7 @@ class CircuitBreaker:
     This pattern is described by Michael T. Nygard in his book 'Release It!'.
     """
 
-    def __init__(self, fail_max=5, reset_timeout=timedelta(seconds=60),
+    def __init__(self, fail_max=5, timeout_duration=timedelta(seconds=60),
                  exclude: Optional[Iterable[type]] = None,
                  listeners: Optional[Iterable['CircuitBreakerListener']] = None,
                  state_storage: Optional['CircuitBreakerStorage'] = None,
@@ -61,7 +61,7 @@ class CircuitBreaker:
         self._state = self._create_new_state(self.current_state)
 
         self._fail_max = fail_max
-        self._reset_timeout = reset_timeout
+        self._timeout_duration = timeout_duration
 
         self._excluded_exception_types = list(exclude or [])
         self._listeners = list(listeners or [])
@@ -89,20 +89,18 @@ class CircuitBreaker:
         self._fail_max = number
 
     @property
-    def reset_timeout(self):
+    def timeout_duration(self):
         """
-        Once this circuit breaker is opened, it should remain opened until the
-        timeout period, in seconds, elapses.
+        Once this circuit breaker is opened, it should remain opened until the timeout period elapses.
         """
-        return self._reset_timeout
+        return self._timeout_duration
 
-    @reset_timeout.setter
-    def reset_timeout(self, timeout: datetime):
+    @timeout_duration.setter
+    def timeout_duration(self, timeout: datetime):
         """
-        Sets the `timeout` period, in seconds, this circuit breaker should be
-        kept open.
+        Sets the timeout period this circuit breaker should be kept open.
         """
-        self._reset_timeout = timeout
+        self._timeout_duration = timeout
 
     def _create_new_state(self, new_state: str, prev_state=None, notify=False) -> 'CircuitBreakerState':
         """
@@ -769,7 +767,7 @@ class CircuitOpenState(CircuitBreakerState):
         state; otherwise, raises ``CircuitBreakerError`` without any attempt
         to execute the real operation.
         """
-        timeout = self._breaker.reset_timeout
+        timeout = self._breaker.timeout_duration
         opened_at = self._breaker._state_storage.opened_at
         if opened_at and datetime.utcnow() < opened_at + timeout:
             error_msg = 'Timeout not elapsed yet, circuit breaker still open'
