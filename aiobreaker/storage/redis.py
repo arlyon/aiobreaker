@@ -3,8 +3,16 @@ import logging
 import time
 from datetime import datetime
 
-from pybreaker import STATE_CLOSED, HAS_REDIS_SUPPORT
-from storage.base import CircuitBreakerStorage
+from aiobreaker.state import STATE_CLOSED
+from .base import CircuitBreakerStorage
+
+try:
+    from redis.exceptions import RedisError
+except ImportError:
+    HAS_REDIS_SUPPORT = False
+    RedisError = None
+else:
+    HAS_REDIS_SUPPORT = True
 
 
 class CircuitRedisStorage(CircuitBreakerStorage):
@@ -12,7 +20,7 @@ class CircuitRedisStorage(CircuitBreakerStorage):
     Implements a `CircuitBreakerStorage` using redis.
     """
 
-    BASE_NAMESPACE = 'pybreaker'
+    BASE_NAMESPACE = 'aiobreaker'
 
     logger = logging.getLogger(__name__)
 

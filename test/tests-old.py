@@ -10,8 +10,9 @@ import fakeredis
 from pytest import raises
 from redis.exceptions import RedisError
 
-from pybreaker import CircuitBreaker, CircuitBreakerError, CircuitBreakerListener, STATE_OPEN, STATE_CLOSED, \
-    STATE_HALF_OPEN
+from aiobreaker import CircuitBreaker, CircuitBreakerError
+from listener import CircuitBreakerListener
+from state import STATE_OPEN, STATE_CLOSED, STATE_HALF_OPEN
 from storage.redis import CircuitRedisStorage
 from storage.memory import CircuitMemoryStorage
 
@@ -50,7 +51,7 @@ class CircuitBreakerRedisTestCase(CircuitBreakerStorageBasedTestCase,
         def func(_):
             raise RedisError()
 
-        logger = logging.getLogger('pybreaker')
+        logger = logging.getLogger('aiobreaker')
         logger.setLevel(logging.FATAL)
         self._breaker_kwargs = {
             'state_storage': CircuitRedisStorage('closed', self.redis, fallback_circuit_state='open')

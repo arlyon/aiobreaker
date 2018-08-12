@@ -1,6 +1,6 @@
 from pytest import raises
 
-from pybreaker import CircuitBreaker
+from aiobreaker import CircuitBreaker
 from test.util import DummyException, func_succeed_async
 
 

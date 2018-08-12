@@ -9,5 +9,4 @@ dist/
 
 # Pycharm directories 
 .idea
-.ropeproject/
-*.iml
+.pytest_cache

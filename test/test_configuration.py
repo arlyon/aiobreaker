@@ -3,8 +3,9 @@ from time import sleep
 
 from pytest import raises
 
-from pybreaker import CircuitBreaker, CircuitBreakerError, STATE_OPEN, STATE_HALF_OPEN, STATE_CLOSED, \
-    CircuitBreakerListener
+from aiobreaker import CircuitBreaker, CircuitBreakerError
+from listener import CircuitBreakerListener
+from state import STATE_OPEN, STATE_CLOSED, STATE_HALF_OPEN
 from storage.memory import CircuitMemoryStorage
 from test.util import func_exception, func_succeed, DummyException, func_succeed_counted
 

@@ -1,6 +1,6 @@
 from time import sleep
 
-from pybreaker import CircuitBreaker, CircuitBreakerListener, CircuitBreakerError
+from aiobreaker import CircuitBreaker, CircuitBreakerError, CircuitBreakerListener
 from test.util import DummyException, func_exception, start_threads, func_succeed
 
 # these are the test fixtures for pytest

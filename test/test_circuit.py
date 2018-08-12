@@ -2,7 +2,8 @@ from time import sleep
 
 from pytest import raises
 
-from pybreaker import CircuitBreaker, CircuitBreakerError, STATE_OPEN, STATE_HALF_OPEN, STATE_CLOSED
+from aiobreaker import CircuitBreaker, CircuitBreakerError
+from aiobreaker.state import STATE_CLOSED, STATE_OPEN, STATE_HALF_OPEN
 from test.util import func_exception, func_succeed, DummyException, func_succeed_counted
 
 # these are the test fixtures for pytest
@@ -179,18 +180,18 @@ def test_generator(storage):
     breaker = CircuitBreaker(state_storage=storage)
 
     @breaker
-    def func_succeed():
+    def func_yield_succeed():
         """Docstring"""
         yield True
 
     @breaker
-    def func_exception():
+    def func_yield_exception():
         """Docstring"""
         x = yield True
         raise DummyException(x)
 
-    s = func_succeed()
-    e = func_exception()
+    s = func_yield_succeed()
+    e = func_yield_exception()
     next(e)
 
     with raises(DummyException):

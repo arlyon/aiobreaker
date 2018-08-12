@@ -1,4 +1,4 @@
-from storage.base import CircuitBreakerStorage
+from .base import CircuitBreakerStorage
 
 
 class CircuitMemoryStorage(CircuitBreakerStorage):

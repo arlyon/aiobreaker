@@ -3,7 +3,7 @@ from datetime import timedelta
 from _pytest.fixtures import fixture
 from fakeredis import FakeStrictRedis
 
-from pybreaker import STATE_CLOSED
+from state import STATE_CLOSED
 from storage.redis import CircuitRedisStorage
 from storage.memory import CircuitMemoryStorage
 

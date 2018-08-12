@@ -1,6 +1,8 @@
 from _pytest.python_api import raises
 
-from pybreaker import CircuitBreakerListener, CircuitBreaker, STATE_CLOSED, STATE_OPEN, STATE_HALF_OPEN
+from aiobreaker import CircuitBreaker
+from listener import CircuitBreakerListener
+from state import STATE_OPEN, STATE_CLOSED, STATE_HALF_OPEN
 from test.util import DummyException, func_succeed, func_exception
 
 # these are the test fixtures for pytest
