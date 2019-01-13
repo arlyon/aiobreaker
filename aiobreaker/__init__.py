@@ -10,6 +10,5 @@ book at http://pragprog.com/titles/mnee/release-it
 
 from .circuitbreaker import CircuitBreaker
 from .listener import CircuitBreakerListener
-from .state import CircuitBreakerError
-
-__all__ = ('CircuitBreakerError', 'CircuitBreaker', 'CircuitBreakerListener')
+from .state import CircuitBreakerError, CircuitBreakerState
+from . import storage
