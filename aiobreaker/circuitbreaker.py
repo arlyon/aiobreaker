@@ -5,20 +5,16 @@ from threading import RLock
 from typing import Optional, Iterable, Tuple, Callable, Coroutine
 
 from .listener import CircuitBreakerListener
-from .state import STATE_OPEN, STATE_CLOSED, STATE_HALF_OPEN, CircuitClosedState, CircuitOpenState, CircuitHalfOpenState
+from .state import CircuitBreakerState, CircuitBreakerBaseState
 from .storage.base import CircuitBreakerStorage
 from .storage.memory import CircuitMemoryStorage
 
 
 class CircuitBreaker:
     """
-    More abstractly, circuit breakers exists to allow one subsystem to fail
-    without destroying the entire system.
-
-    This is done by wrapping dangerous operations (typically integration points)
-    with a component that can circumvent calls when the system is not healthy.
-
-    This pattern is described by Michael T. Nygard in his book 'Release It!'.
+    A circuit breaker is a route through which functions are executed.
+    When a function is executed via a circuit breaker, the breaker is notified.
+    Multiple failed attempts will open the breaker and block additional calls.
     """
 
     def __init__(self, fail_max=5, timeout_duration=timedelta(seconds=60),
@@ -28,9 +24,15 @@ class CircuitBreaker:
                  name: Optional[str] = None):
         """
         Creates a new circuit breaker with the given parameters.
+        :param fail_max: The maximum number of failures for the breaker.
+        :param timeout_duration: The timeout to elapse for a breaker to close again.
+        :param exclude: A list of excluded :class:`Exception` types to ignore.
+        :param listeners: A list of :class:`CircuitBreakerListener`
+        :param state_storage: A type of storage. Defaults to :class:`CircuitMemoryStorage`
+        :param name: The name for the breaker.
         """
         self._lock = RLock()
-        self._state_storage = state_storage or CircuitMemoryStorage(STATE_CLOSED)
+        self._state_storage = state_storage or CircuitMemoryStorage(CircuitBreakerState.CLOSED)
         self._state = self._create_new_state(self.current_state)
 
         self._fail_max = fail_max
@@ -77,22 +79,18 @@ class CircuitBreaker:
         """
         self._timeout_duration = timeout
 
-    def _create_new_state(self, new_state: str, prev_state=None, notify=False) -> 'CircuitBreakerState':
+    def _create_new_state(self, new_state: CircuitBreakerState, prev_state=None,
+                          notify=False) -> 'CircuitBreakerBaseState':
         """
         Return state object from state string, i.e.,
         'closed' -> <CircuitClosedState>
         """
-        state_map = {
-            STATE_CLOSED: CircuitClosedState,
-            STATE_OPEN: CircuitOpenState,
-            STATE_HALF_OPEN: CircuitHalfOpenState,
-        }
 
         try:
-            return state_map[new_state](self, prev_state=prev_state, notify=notify)
+            return new_state.value(self, prev_state=prev_state, notify=notify)
         except KeyError:
             msg = "Unknown state {!r}, valid states: {}"
-            raise ValueError(msg.format(new_state, ', '.join(state_map)))
+            raise ValueError(msg.format(new_state, ', '.join(state.value for state in CircuitBreakerState)))
 
     @property
     def state(self):
@@ -100,7 +98,7 @@ class CircuitBreaker:
         Update (if needed) and returns the cached state object.
         """
         # Ensure cached state is up-to-date
-        if self.current_state != self._state.name:
+        if self.current_state != self._state.state:
             # If cached state is out-of-date, that means that it was likely
             # changed elsewhere (e.g. another process instance). We still send
             # out a notification, informing others that this particular circuit
@@ -118,10 +116,9 @@ class CircuitBreaker:
                 state_str, prev_state=self._state, notify=True)
 
     @property
-    def current_state(self):
+    def current_state(self) -> CircuitBreakerState:
         """
-        Returns a string that identifies the state of the circuit breaker as
-        reported by the _state_storage. i.e., 'closed', 'open', 'half-open'.
+        Returns a CircuitBreakerState that identifies the state of the circuit breaker.
         """
         return self._state_storage.state
 
@@ -143,6 +140,7 @@ class CircuitBreaker:
     def add_excluded_exceptions(self, *exceptions):
         """
         Adds exceptions to the list of excluded exceptions.
+        :param exceptions: Any Exception types you wish to ignore.
         """
         for exc in exceptions:
             self.add_excluded_exception(exc)
@@ -210,7 +208,7 @@ class CircuitBreaker:
         until timeout elapses.
         """
         with self._lock:
-            self.state = self._state_storage.state = STATE_OPEN
+            self.state = self._state_storage.state = CircuitBreakerState.OPEN
 
     def half_open(self):
         """
@@ -219,14 +217,14 @@ class CircuitBreaker:
         succeeds).
         """
         with self._lock:
-            self.state = self._state_storage.state = STATE_HALF_OPEN
+            self.state = self._state_storage.state = CircuitBreakerState.HALF_OPEN
 
     def close(self):
         """
         Closes the circuit, e.g. lets the following calls execute as usual.
         """
         with self._lock:
-            self.state = self._state_storage.state = STATE_CLOSED
+            self.state = self._state_storage.state = CircuitBreakerState.CLOSED
 
     def __call__(self, *call_args, ignore_on_call=True):
         """

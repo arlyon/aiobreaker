@@ -1,3 +1,4 @@
+from aiobreaker.state import CircuitBreakerState
 from .base import CircuitBreakerStorage
 
 
@@ -6,7 +7,7 @@ class CircuitMemoryStorage(CircuitBreakerStorage):
     Implements a `CircuitBreakerStorage` in local memory.
     """
 
-    def __init__(self, state: str):
+    def __init__(self, state: CircuitBreakerState):
         """
         Creates a new instance with the given `state`.
         """
@@ -16,14 +17,14 @@ class CircuitMemoryStorage(CircuitBreakerStorage):
         self._state = state
 
     @property
-    def state(self):
+    def state(self) -> CircuitBreakerState:
         """
         Returns the current circuit breaker state.
         """
         return self._state
 
     @state.setter
-    def state(self, state):
+    def state(self, state: CircuitBreakerState):
         """
         Set the current circuit breaker state to `state`.
         """

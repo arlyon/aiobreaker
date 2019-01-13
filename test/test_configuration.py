@@ -1,21 +1,21 @@
 from datetime import timedelta
-from time import sleep
 
 from pytest import raises
 
-from aiobreaker import CircuitBreaker, CircuitBreakerError
-from listener import CircuitBreakerListener
-from state import STATE_OPEN, STATE_CLOSED, STATE_HALF_OPEN
-from storage.memory import CircuitMemoryStorage
-from test.util import func_exception, func_succeed, DummyException, func_succeed_counted
+from aiobreaker import CircuitBreaker
+from aiobreaker.listener import CircuitBreakerListener
+from aiobreaker.state import CircuitBreakerState
+from aiobreaker.storage.memory import CircuitMemoryStorage
+from test.util import func_succeed, DummyException
 
 
 def test_default_state():
     """It should get initial state from state_storage."""
-    for state in (STATE_OPEN, STATE_CLOSED, STATE_HALF_OPEN):
+    for state in CircuitBreakerState:
         storage = CircuitMemoryStorage(state)
         breaker = CircuitBreaker(state_storage=storage)
-        assert breaker.state.name == state
+        assert isinstance(breaker.state, state.value)
+        assert breaker.state.state == state
 
 
 def test_default_params():
@@ -25,7 +25,7 @@ def test_default_params():
     assert 0 == breaker.fail_counter
     assert timedelta(seconds=60) == breaker.timeout_duration
     assert 5 == breaker.fail_max
-    assert STATE_CLOSED == breaker.current_state
+    assert CircuitBreakerState.CLOSED == breaker.current_state
     assert () == breaker.excluded_exceptions
     assert () == breaker.listeners
     assert 'memory' == breaker._state_storage.name
@@ -247,6 +247,43 @@ def test_decorator():
 
     suc()
     assert 0 == breaker.fail_counter
+
+
+def test_decorator_arguments():
+    """It should accept arguments to the decorator."""
+
+    breaker = CircuitBreaker()
+
+    @breaker(ignore_on_call=True)
+    def suc():
+        """Docstring"""
+        pass
+
+    @breaker()
+    def err():
+        """Docstring"""
+        raise DummyException()
+
+    assert 0 == breaker.fail_counter
+
+    with raises(DummyException):
+        err()
+
+    assert 1 == breaker.fail_counter
+
+    suc()
+    assert 0 == breaker.fail_counter
+
+
+def test_decorator_positional_arguments():
+    """It should throw an error when positional arguments are supplied to the decorator."""
+    breaker = CircuitBreaker()
+
+    with raises(TypeError):
+        @breaker(True)
+        def suc():
+            """Docstring"""
+            pass
 
 
 def test_double_count():

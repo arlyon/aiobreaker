@@ -69,7 +69,7 @@ def test_half_open_thread_safety(delta):
             self.count = 0
 
         def state_change(self, breaker, old, new):
-            if new.name != old.name:
+            if new.state != old.state:
                 self.count += 1
 
     breaker = CircuitBreaker(fail_max=1, timeout_duration=delta)

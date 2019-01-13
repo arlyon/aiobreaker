@@ -3,7 +3,8 @@ from time import sleep
 from pytest import raises
 
 from aiobreaker import CircuitBreaker, CircuitBreakerError
-from aiobreaker.state import STATE_CLOSED, STATE_OPEN, STATE_HALF_OPEN
+from aiobreaker.state import CircuitBreakerState
+from aiobreaker.storage.memory import CircuitMemoryStorage
 from test.util import func_exception, func_succeed, DummyException, func_succeed_counted
 
 
@@ -13,7 +14,7 @@ def test_successful_call(storage):
     breaker = CircuitBreaker(state_storage=storage)
     assert breaker.call(func_succeed)
     assert 0 == breaker.fail_counter
-    assert STATE_CLOSED == breaker.current_state
+    assert CircuitBreakerState.CLOSED == breaker.current_state
 
 
 def test_one_failed_call(storage):
@@ -25,7 +26,7 @@ def test_one_failed_call(storage):
         breaker.call(func_exception)
 
     assert 1 == breaker.fail_counter
-    assert STATE_CLOSED == breaker.current_state
+    assert CircuitBreakerState.CLOSED == breaker.current_state
 
 
 def test_one_successful_call_after_failed_call(storage):
@@ -40,7 +41,7 @@ def test_one_successful_call_after_failed_call(storage):
 
     assert breaker.call(func_succeed)
     assert 0 == breaker.fail_counter
-    assert STATE_CLOSED == breaker.current_state
+    assert CircuitBreakerState.CLOSED == breaker.current_state
 
 
 def test_several_failed_calls(storage):
@@ -59,7 +60,7 @@ def test_several_failed_calls(storage):
         breaker.call(func_exception)
 
     assert breaker.fail_counter == 3
-    assert breaker.current_state == STATE_OPEN
+    assert breaker.current_state == CircuitBreakerState.OPEN
 
 
 def test_failed_call_after_timeout(storage, delta):
@@ -73,7 +74,7 @@ def test_failed_call_after_timeout(storage, delta):
     with raises(DummyException):
         breaker.call(func_exception)
 
-    assert STATE_CLOSED == breaker.current_state
+    assert CircuitBreakerState.CLOSED == breaker.current_state
 
     # Circuit should open
     with raises(CircuitBreakerError):
@@ -88,7 +89,7 @@ def test_failed_call_after_timeout(storage, delta):
         breaker.call(func_exception)
 
     assert 4 == breaker.fail_counter
-    assert STATE_OPEN == breaker.current_state
+    assert CircuitBreakerState.OPEN == breaker.current_state
 
 
 def test_successful_after_timeout(storage, delta):
@@ -103,13 +104,13 @@ def test_successful_after_timeout(storage, delta):
     with raises(DummyException):
         breaker.call(func_exception)
 
-    assert STATE_CLOSED == breaker.current_state
+    assert CircuitBreakerState.CLOSED == breaker.current_state
 
     # Circuit should open
     with raises(CircuitBreakerError):
         breaker.call(func_exception)
 
-    assert STATE_OPEN == breaker.current_state
+    assert CircuitBreakerState.OPEN == breaker.current_state
 
     with raises(CircuitBreakerError):
         breaker.call(func_succeed)
@@ -122,7 +123,7 @@ def test_successful_after_timeout(storage, delta):
     # Circuit should close again
     assert breaker.call(func_succeed)
     assert 0 == breaker.fail_counter
-    assert STATE_CLOSED == breaker.current_state
+    assert CircuitBreakerState.CLOSED == breaker.current_state
     assert 1 == func_succeed.call_count
 
 
@@ -133,13 +134,13 @@ def test_failed_call_when_half_open(storage):
 
     breaker.half_open()
     assert 0 == breaker.fail_counter
-    assert STATE_HALF_OPEN == breaker.current_state
+    assert CircuitBreakerState.HALF_OPEN == breaker.current_state
 
     with raises(CircuitBreakerError):
         breaker.call(func_exception)
 
     assert 1 == breaker.fail_counter
-    assert STATE_OPEN == breaker.current_state
+    assert CircuitBreakerState.OPEN == breaker.current_state
 
 
 def test_successful_call_when_half_open(storage):
@@ -149,12 +150,12 @@ def test_successful_call_when_half_open(storage):
 
     breaker.half_open()
     assert 0 == breaker.fail_counter
-    assert STATE_HALF_OPEN == breaker.current_state
+    assert CircuitBreakerState.HALF_OPEN == breaker.current_state
 
     # Circuit should open
     assert breaker.call(func_succeed)
     assert 0 == breaker.fail_counter
-    assert STATE_CLOSED == breaker.current_state
+    assert CircuitBreakerState.CLOSED == breaker.current_state
 
 
 def test_close(storage):
@@ -164,11 +165,11 @@ def test_close(storage):
 
     breaker.open()
     assert 0 == breaker.fail_counter
-    assert STATE_OPEN == breaker.current_state
+    assert CircuitBreakerState.OPEN == breaker.current_state
 
     breaker.close()
     assert 0 == breaker.fail_counter
-    assert STATE_CLOSED == breaker.current_state
+    assert CircuitBreakerState.CLOSED == breaker.current_state
 
 
 def test_generator(storage):

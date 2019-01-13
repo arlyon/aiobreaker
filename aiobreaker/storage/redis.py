@@ -3,7 +3,7 @@ import logging
 import time
 from datetime import datetime
 
-from aiobreaker.state import STATE_CLOSED
+from aiobreaker.state import CircuitClosedState, CircuitBreakerState
 from .base import CircuitBreakerStorage
 
 try:
@@ -24,7 +24,8 @@ class CircuitRedisStorage(CircuitBreakerStorage):
 
     logger = logging.getLogger(__name__)
 
-    def __init__(self, state, redis_object, namespace=None, fallback_circuit_state=STATE_CLOSED):
+    def __init__(self, state: CircuitBreakerState, redis_object, namespace=None,
+                 fallback_circuit_state=CircuitBreakerState.CLOSED):
         """
         Creates a new instance with the given `state` and `redis` object. The
         redis object should be similar to pyredis' StrictRedis class. If there
@@ -47,13 +48,13 @@ class CircuitRedisStorage(CircuitBreakerStorage):
         self._redis = redis_object
         self._namespace_name = namespace
         self._fallback_circuit_state = fallback_circuit_state
-        self._initial_state = str(state)
+        self._initial_state = state
 
         self._initialize_redis_state(self._initial_state)
 
-    def _initialize_redis_state(self, state):
+    def _initialize_redis_state(self, state: CircuitBreakerState):
         self._redis.setnx(self._namespace('fail_counter'), 0)
-        self._redis.setnx(self._namespace('state'), state)
+        self._redis.setnx(self._namespace('state'), state.name)
 
     @property
     def state(self):
@@ -77,7 +78,7 @@ class CircuitRedisStorage(CircuitBreakerStorage):
             # the circuit breaker state on redis
             self._initialize_redis_state(self._fallback_circuit_state)
 
-        return state
+        return getattr(CircuitBreakerState, state)
 
     @state.setter
     def state(self, state):
@@ -85,7 +86,7 @@ class CircuitRedisStorage(CircuitBreakerStorage):
         Set the current circuit breaker state to `state`.
         """
         try:
-            self._redis.set(self._namespace('state'), str(state))
+            self._redis.set(self._namespace('state'), state.name)
         except self.RedisError:
             self.logger.error('RedisError', exc_info=True)
             pass

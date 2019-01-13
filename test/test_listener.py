@@ -1,8 +1,8 @@
 from _pytest.python_api import raises
 
 from aiobreaker import CircuitBreaker
-from listener import CircuitBreakerListener
-from state import STATE_OPEN, STATE_CLOSED, STATE_HALF_OPEN
+from aiobreaker.listener import CircuitBreakerListener
+from aiobreaker.state import CircuitBreakerState
 from test.util import DummyException, func_succeed, func_exception
 
 
@@ -15,22 +15,26 @@ def test_transition_events(storage):
 
         def state_change(self, breaker, old, new):
             assert breaker
-            self.out.append((old.name, new.name))
+            self.out.append((old.state, new.state))
 
     listener = Listener()
     breaker = CircuitBreaker(listeners=(listener,), state_storage=storage)
-    assert STATE_CLOSED == breaker.current_state
+    assert CircuitBreakerState.CLOSED == breaker.current_state
 
     breaker.open()
-    assert STATE_OPEN == breaker.current_state
+    assert CircuitBreakerState.OPEN == breaker.current_state
 
     breaker.half_open()
-    assert STATE_HALF_OPEN == breaker.current_state
+    assert CircuitBreakerState.HALF_OPEN == breaker.current_state
 
     breaker.close()
-    assert STATE_CLOSED == breaker.current_state
+    assert CircuitBreakerState.CLOSED == breaker.current_state
 
-    assert [(STATE_CLOSED, STATE_OPEN), (STATE_OPEN, STATE_HALF_OPEN), (STATE_HALF_OPEN, STATE_CLOSED)] == listener.out
+    assert [
+               (CircuitBreakerState.CLOSED, CircuitBreakerState.OPEN),
+               (CircuitBreakerState.OPEN, CircuitBreakerState.HALF_OPEN),
+               (CircuitBreakerState.HALF_OPEN, CircuitBreakerState.CLOSED)
+           ] == listener.out
 
 
 def test_call_events(storage):

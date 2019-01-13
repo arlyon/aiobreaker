@@ -1,39 +1,47 @@
 import types
 from abc import ABC
-from datetime import datetime
+from datetime import datetime, timedelta
+from enum import Enum
 from typing import Callable, Coroutine, Union, Optional
-
-STATE_OPEN = 'open'
-STATE_CLOSED = 'closed'
-STATE_HALF_OPEN = 'half-open'
 
 
 class CircuitBreakerError(Exception):
     """
     Raised when the function fails due to the breaker being open.
     """
-    pass
+
+    def __init__(self, message: str, reopen_time: datetime):
+        """
+        :param message: The reasoning.
+        :param reopen_time: When the breaker re-opens.
+        """
+        self.message = message
+        self._reopen_time = reopen_time
+
+    @property
+    def time_remaining(self) -> timedelta:
+        return self._reopen_time - datetime.now()
 
 
-class CircuitBreakerState(ABC):
+class CircuitBreakerBaseState(ABC):
     """
     Implements the behavior needed by all circuit breaker states.
     """
 
-    def __init__(self, breaker: 'CircuitBreaker', name: str):
+    def __init__(self, breaker: 'CircuitBreaker', state: 'CircuitBreakerState'):
         """
         Creates a new instance associated with the circuit breaker `cb` and
         identified by `name`.
         """
         self._breaker = breaker
-        self._name = name
+        self._state = state
 
     @property
-    def name(self):
+    def state(self) -> 'CircuitBreakerState':
         """
         Returns a human friendly name that identifies this state.
         """
-        return self._name
+        return self._state
 
     def _handle_error(self, func: Callable, exception: Exception):
         """
@@ -128,7 +136,7 @@ class CircuitBreakerState(ABC):
         pass
 
 
-class CircuitClosedState(CircuitBreakerState):
+class CircuitClosedState(CircuitBreakerBaseState):
     """
     In the normal "closed" state, the circuit breaker executes operations as
     usual. If the call succeeds, nothing happens. If it fails, however, the
@@ -138,11 +146,11 @@ class CircuitClosedState(CircuitBreakerState):
     and "opens" the circuit.
     """
 
-    def __init__(self, breaker, prev_state: Optional[CircuitBreakerState] = None, notify=False):
+    def __init__(self, breaker, prev_state: Optional[CircuitBreakerBaseState] = None, notify=False):
         """
         Moves the given circuit breaker to the "closed" state.
         """
-        super().__init__(breaker, STATE_CLOSED)
+        super().__init__(breaker, CircuitBreakerState.CLOSED)
         if notify:
             # We only reset the counter if notify is True, otherwise the CircuitBreaker
             # will lose it's failure count due to a second CircuitBreaker being created
@@ -160,10 +168,11 @@ class CircuitClosedState(CircuitBreakerState):
         """
         if self._breaker._state_storage.counter >= self._breaker.fail_max:
             self._breaker.open()
-            raise CircuitBreakerError('Failures threshold reached, circuit breaker opened.') from exception
+            raise CircuitBreakerError('Failures threshold reached, circuit breaker opened.',
+                                      datetime.now() + self._breaker.timeout_duration) from exception
 
 
-class CircuitOpenState(CircuitBreakerState):
+class CircuitOpenState(CircuitBreakerBaseState):
     """
     When the circuit is "open", calls to the circuit breaker fail immediately,
     without any attempt to execute the real operation. This is indicated by the
@@ -177,7 +186,7 @@ class CircuitOpenState(CircuitBreakerState):
         """
         Moves the given circuit breaker to the "open" state.
         """
-        super().__init__(breaker, STATE_OPEN)
+        super().__init__(breaker, CircuitBreakerState.OPEN)
         self._breaker._state_storage.opened_at = datetime.utcnow()
         if notify:
             for listener in self._breaker.listeners:
@@ -191,8 +200,7 @@ class CircuitOpenState(CircuitBreakerState):
         timeout = self._breaker.timeout_duration
         opened_at = self._breaker._state_storage.opened_at
         if opened_at and datetime.utcnow() < opened_at + timeout:
-            error_msg = 'Timeout not elapsed yet, circuit breaker still open'
-            raise CircuitBreakerError(error_msg)
+            raise CircuitBreakerError('Timeout not elapsed yet, circuit breaker still open', datetime.now() + self._breaker.timeout_duration)
 
     def call(self, func, *args, **kwargs):
         """
@@ -211,7 +219,7 @@ class CircuitOpenState(CircuitBreakerState):
         return await self._breaker.call_async(func, *args, **kwargs)
 
 
-class CircuitHalfOpenState(CircuitBreakerState):
+class CircuitHalfOpenState(CircuitBreakerBaseState):
     """
     In the "half-open" state, the next call to the circuit breaker is allowed
     to execute the dangerous operation. Should the call succeed, the circuit
@@ -224,7 +232,7 @@ class CircuitHalfOpenState(CircuitBreakerState):
         """
         Moves the given circuit breaker to the "half-open" state.
         """
-        super().__init__(breaker, STATE_HALF_OPEN)
+        super().__init__(breaker, CircuitBreakerState.HALF_OPEN)
         if notify:
             for listener in self._breaker._listeners:
                 listener.state_change(self._breaker, prev_state, self)
@@ -234,10 +242,18 @@ class CircuitHalfOpenState(CircuitBreakerState):
         Opens the circuit breaker.
         """
         self._breaker.open()
-        raise CircuitBreakerError('Trial call failed, circuit breaker opened.') from exception
+        raise CircuitBreakerError('Trial call failed, circuit breaker opened.',
+                                  datetime.now() + self._breaker.timeout_duration) from exception
 
     def on_success(self):
         """
         Closes the circuit breaker.
         """
         self._breaker.close()
+
+
+class CircuitBreakerState(Enum):
+
+    OPEN = CircuitOpenState
+    CLOSED = CircuitClosedState
+    HALF_OPEN = CircuitHalfOpenState

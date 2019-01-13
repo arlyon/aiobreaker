@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 
+from aiobreaker.state import CircuitBreakerState
+
 
 class CircuitBreakerStorage(ABC):
     """
@@ -24,7 +26,7 @@ class CircuitBreakerStorage(ABC):
 
     @property
     @abstractmethod
-    def state(self) -> str:
+    def state(self) -> CircuitBreakerState:
         """
         Override this method to retrieve the current circuit breaker state.
         """
@@ -32,7 +34,7 @@ class CircuitBreakerStorage(ABC):
 
     @state.setter
     @abstractmethod
-    def state(self, state: str):
+    def state(self, state: CircuitBreakerState):
         """
         Override this method to set the current circuit breaker state.
         """

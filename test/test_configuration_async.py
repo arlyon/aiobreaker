@@ -1,8 +1,9 @@
-from pytest import raises
+from pytest import raises, mark
 
 from aiobreaker import CircuitBreaker
 from test.util import DummyException, func_succeed_async
 
+pytestmark = mark.asyncio
 
 async def test_call_with_no_args_async():
     """
