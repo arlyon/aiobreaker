@@ -183,10 +183,24 @@ class CircuitBreaker:
         Calls `func` with the given `args` and `kwargs` according to the rules
         implemented by the current state of this circuit breaker.
         """
+        if getattr(func, "_ignore_on_call", False):
+            # if the function has set `_ignore_on_call` to True,
+            # it is a decorator that needs to avoid triggering
+            # the circuit breaker twice
+            return func(*args, **kwargs)
         with self._lock:
             return self.state.call(func, *args, **kwargs)
 
     async def call_async(self, func: Callable[..., Coroutine], *args, **kwargs):
+        """
+        Calls `func` with the given `args` and `kwargs` according to the rules
+        implemented by the current state of this circuit breaker.
+        """
+        if getattr(func, "_ignore_on_call", False):
+            # if the function has set `_ignore_on_call` to True,
+            # it is a decorator that needs to avoid triggering
+            # the circuit breaker twice
+            return await func(*args, **kwargs)
         with self._lock:
             return await self.state.call_async(func, *args, **kwargs)
 
@@ -214,10 +228,13 @@ class CircuitBreaker:
         with self._lock:
             self.state = self._state_storage.state = STATE_CLOSED
 
-    def __call__(self, *call_args, **call_kwargs):
+    def __call__(self, *call_args, ignore_on_call=True):
         """
         Returns a wrapper that calls the function `func` according to the rules
         implemented by the current state of this circuit breaker.
+
+        :param ignore_on_call: Whether the decorated function should be ignored when using
+            :func:`~CircuitBreaker.call`, preventing the breaker being triggered twice.
         """
 
         def _outer_wrapper(func):
@@ -230,12 +247,17 @@ class CircuitBreaker:
                 return await self.call_async(func, *args, **kwargs)
 
             return_func = _inner_wrapper_async if inspect.iscoroutinefunction(func) else _inner_wrapper
-            self._decorated_functions.add(return_func)
+            return_func._ignore_on_call = ignore_on_call
             return return_func
 
-        if call_args:
+        if len(call_args) == 1 and inspect.isfunction(call_args[0]):
+            # if decorator called without arguments, pass the function on
             return _outer_wrapper(*call_args)
-        return _outer_wrapper
+        elif len(call_args) == 0:
+            # if decorator called with arguments, _outer_wrapper will receive the function
+            return _outer_wrapper
+        else:
+            raise TypeError("Decorator does not accept positional arguments.")
 
     @property
     def listeners(self):
