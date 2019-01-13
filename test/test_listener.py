@@ -5,9 +5,6 @@ from listener import CircuitBreakerListener
 from state import STATE_OPEN, STATE_CLOSED, STATE_HALF_OPEN
 from test.util import DummyException, func_succeed, func_exception
 
-# these are the test fixtures for pytest
-from test.fixtures import *
-
 
 def test_transition_events(storage):
     """It should call the appropriate functions on every state transition."""

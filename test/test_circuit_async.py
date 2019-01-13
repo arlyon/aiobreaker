@@ -6,9 +6,6 @@ from aiobreaker import CircuitBreaker, CircuitBreakerError
 from state import STATE_OPEN, STATE_CLOSED, STATE_HALF_OPEN
 from test.util import func_succeed_async, DummyException, func_exception_async, func_succeed_counted_async
 
-# these are the test fixtures for pytest
-from test.fixtures import *
-
 pytestmark = mark.asyncio
 
 

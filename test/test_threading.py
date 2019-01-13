@@ -3,9 +3,6 @@ from time import sleep
 from aiobreaker import CircuitBreaker, CircuitBreakerError, CircuitBreakerListener
 from test.util import DummyException, func_exception, start_threads, func_succeed
 
-# these are the test fixtures for pytest
-from test.fixtures import *
-
 
 def test_fail_thread_safety(delta):
     """It should compute a failed call atomically to avoid race conditions."""

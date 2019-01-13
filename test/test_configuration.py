@@ -9,9 +9,6 @@ from state import STATE_OPEN, STATE_CLOSED, STATE_HALF_OPEN
 from storage.memory import CircuitMemoryStorage
 from test.util import func_exception, func_succeed, DummyException, func_succeed_counted
 
-# these are the test fixtures for pytest
-from test.fixtures import *
-
 
 def test_default_state():
     """It should get initial state from state_storage."""

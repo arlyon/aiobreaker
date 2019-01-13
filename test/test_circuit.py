@@ -6,9 +6,6 @@ from aiobreaker import CircuitBreaker, CircuitBreakerError
 from aiobreaker.state import STATE_CLOSED, STATE_OPEN, STATE_HALF_OPEN
 from test.util import func_exception, func_succeed, DummyException, func_succeed_counted
 
-# these are the test fixtures for pytest
-from test.fixtures import *
-
 
 def test_successful_call(storage):
     """It should keep the circuit closed after a successful call."""
