@@ -1,3 +1,4 @@
+from datetime import datetime
 from time import sleep
 
 from pytest import raises
@@ -156,6 +157,17 @@ def test_successful_call_when_half_open(storage):
     assert breaker.call(func_succeed)
     assert 0 == breaker.fail_counter
     assert CircuitBreakerState.CLOSED == breaker.current_state
+
+
+def test_state_opened_at_not_reset_during_creation():
+    for state in CircuitBreakerState:
+        storage = CircuitMemoryStorage(state)
+        now = datetime.now()
+        storage.opened_at = now
+
+        breaker = CircuitBreaker(state_storage=storage)
+        assert breaker.state.state == state
+        assert storage.opened_at == now
 
 
 def test_close(storage):

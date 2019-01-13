@@ -187,7 +187,6 @@ class CircuitOpenState(CircuitBreakerBaseState):
         Moves the given circuit breaker to the "open" state.
         """
         super().__init__(breaker, CircuitBreakerState.OPEN)
-        self._breaker._state_storage.opened_at = datetime.utcnow()
         if notify:
             for listener in self._breaker.listeners:
                 listener.state_change(self._breaker, prev_state, self)

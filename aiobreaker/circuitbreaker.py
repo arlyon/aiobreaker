@@ -208,6 +208,7 @@ class CircuitBreaker:
         until timeout elapses.
         """
         with self._lock:
+            self._state_storage.opened_at = datetime.utcnow()
             self.state = self._state_storage.state = CircuitBreakerState.OPEN
 
     def half_open(self):
