@@ -2,7 +2,7 @@ import inspect
 from datetime import timedelta, datetime
 from functools import wraps
 from threading import RLock
-from typing import Optional, Iterable, Tuple, Callable, Coroutine
+from typing import Optional, Iterable, Callable, Coroutine, Type
 
 from .listener import CircuitBreakerListener
 from .state import CircuitBreakerState, CircuitBreakerBaseState
@@ -17,8 +17,9 @@ class CircuitBreaker:
     Multiple failed attempts will open the breaker and block additional calls.
     """
 
-    def __init__(self, fail_max=5, timeout_duration=timedelta(seconds=60),
-                 exclude: Optional[Iterable[type]] = None,
+    def __init__(self, fail_max=5,
+                 timeout_duration: Optional[timedelta] = None,
+                 exclude: Optional[Iterable[Type[Exception]]] = None,
                  listeners: Optional[Iterable[CircuitBreakerListener]] = None,
                  state_storage: Optional[CircuitBreakerStorage] = None,
                  name: Optional[str] = None):
@@ -36,13 +37,11 @@ class CircuitBreaker:
         self._state = self._create_new_state(self.current_state)
 
         self._fail_max = fail_max
-        self._timeout_duration = timeout_duration
+        self._timeout_duration = timeout_duration if timeout_duration else timedelta(seconds=60)
 
-        self._excluded_exception_types = list(exclude or [])
-        self._listeners = list(listeners or [])
+        self._excluded_exception_types = list(exclude) if exclude else []
+        self._listeners = list(listeners) if listeners else []
         self._name = name
-
-        self._decorated_functions = set()
 
     @property
     def fail_counter(self):
@@ -123,14 +122,14 @@ class CircuitBreaker:
         return self._state_storage.state
 
     @property
-    def excluded_exceptions(self) -> Tuple[type]:
+    def excluded_exceptions(self) -> Type[Exception]:
         """
         Returns a tuple of the excluded exceptions, e.g., exceptions that should
         not be considered system errors by this circuit breaker.
         """
         return tuple(self._excluded_exception_types)
 
-    def add_excluded_exception(self, exception: type):
+    def add_excluded_exception(self, exception: Type[Exception]):
         """
         Adds an exception to the list of excluded exceptions.
         """
@@ -146,7 +145,7 @@ class CircuitBreaker:
         for exc in exceptions:
             self.add_excluded_exception(exc)
 
-    def remove_excluded_exception(self, exception: type):
+    def remove_excluded_exception(self, exception: Type[Exception]):
         """
         Removes an exception from the list of excluded exceptions.
         """
@@ -158,12 +157,6 @@ class CircuitBreaker:
         Increments the counter of failed calls.
         """
         self._state_storage.increment_counter()
-
-    def _is_decorated_function(self, func):
-        """
-        Checks if the given function has previously been decorated by this breaker.
-        """
-        return func in self._decorated_functions
 
     def is_system_error(self, exception: Exception):
         """
@@ -230,7 +223,7 @@ class CircuitBreaker:
 
     def __call__(self, *call_args, ignore_on_call=True):
         """
-        Returns a wrapper that calls the function `func` according to the rules
+        Decorates the function such that calls are handled according to the rules
         implemented by the current state of this circuit breaker.
 
         :param ignore_on_call: Whether the decorated function should be ignored when using
@@ -288,14 +281,14 @@ class CircuitBreaker:
             self._listeners.remove(listener)
 
     @property
-    def name(self):
+    def name(self) -> str:
         """
         Returns the name of this circuit breaker. Useful for logging.
         """
         return self._name
 
     @name.setter
-    def name(self, name):
+    def name(self, name: str):
         """
         Set the name of this circuit breaker.
         """

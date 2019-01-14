@@ -2,7 +2,7 @@ import types
 from abc import ABC
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Callable, Coroutine, Union, Optional
+from typing import Callable, Union, Optional, TypeVar, Awaitable, Generator
 
 
 class CircuitBreakerError(Exception):
@@ -21,6 +21,9 @@ class CircuitBreakerError(Exception):
     @property
     def time_remaining(self) -> timedelta:
         return self._reopen_time - datetime.now()
+
+
+T = TypeVar('T')
 
 
 class CircuitBreakerBaseState(ABC):
@@ -46,6 +49,8 @@ class CircuitBreakerBaseState(ABC):
     def _handle_error(self, func: Callable, exception: Exception):
         """
         Handles a failed call to the guarded operation.
+
+        :raises: The given exception, after calling all the handlers.
         """
         if self._breaker.is_system_error(exception):
             self._breaker._inc_counter()
@@ -65,7 +70,7 @@ class CircuitBreakerBaseState(ABC):
         for listener in self._breaker.listeners:
             listener.success(self._breaker)
 
-    def call(self, func: Callable[..., any], *args, **kwargs):
+    def call(self, func: Callable[..., T], *args, **kwargs) -> T:
         """
         Calls `func` with the given `args` and `kwargs`, and updates the
         circuit breaker state according to the result.
@@ -86,7 +91,7 @@ class CircuitBreakerBaseState(ABC):
             self._handle_success()
         return ret
 
-    async def call_async(self, func: Callable[..., Coroutine], *args, **kwargs):
+    async def call_async(self, func: Callable[..., Awaitable[T]], *args, **kwargs) -> Awaitable[T]:
 
         ret = None
         self.before_call(func, *args, **kwargs)
@@ -95,15 +100,13 @@ class CircuitBreakerBaseState(ABC):
 
         try:
             ret = await func(*args, **kwargs)
-            if isinstance(ret, types.GeneratorType):
-                return self.generator_call(ret)
         except Exception as e:
             self._handle_error(func, e)
         else:
             self._handle_success()
         return ret
 
-    def generator_call(self, wrapped_generator):
+    def generator_call(self, wrapped_generator: Generator):
         try:
             value = yield next(wrapped_generator)
             while True:
@@ -114,7 +117,7 @@ class CircuitBreakerBaseState(ABC):
         except Exception as e:
             self._handle_error(None, e)
 
-    def before_call(self, func: Union[Callable[..., any], Callable[..., Coroutine]], *args, **kwargs):
+    def before_call(self, func: Union[Callable[..., any], Callable[..., Awaitable]], *args, **kwargs):
         """
         Override this method to be notified before a call to the guarded
         operation is attempted.
