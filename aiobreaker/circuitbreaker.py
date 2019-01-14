@@ -1,7 +1,6 @@
 import inspect
 from datetime import timedelta, datetime
 from functools import wraps
-from threading import RLock
 from typing import Optional, Iterable, Callable, Coroutine, Type
 
 from .listener import CircuitBreakerListener
@@ -32,7 +31,6 @@ class CircuitBreaker:
         :param listeners: A list of :class:`CircuitBreakerListener`
         :param state_storage: A type of storage. Defaults to :class:`~aiobreaker.storage.memory.CircuitMemoryStorage`
         """
-        self._lock = RLock()
         self._state_storage = state_storage or CircuitMemoryStorage(CircuitBreakerState.CLOSED)
         self._state = self._create_new_state(self.current_state)
 
@@ -110,9 +108,8 @@ class CircuitBreaker:
         """
         Set cached state and notify listeners of newly cached state.
         """
-        with self._lock:
-            self._state = self._create_new_state(
-                state_str, prev_state=self._state, notify=True)
+        self._state = self._create_new_state(
+            state_str, prev_state=self._state, notify=True)
 
     @property
     def current_state(self) -> CircuitBreakerState:
@@ -133,8 +130,7 @@ class CircuitBreaker:
         """
         Adds an exception to the list of excluded exceptions.
         """
-        with self._lock:
-            self._excluded_exception_types.append(exception)
+        self._excluded_exception_types.append(exception)
 
     def add_excluded_exceptions(self, *exceptions):
         """
@@ -149,8 +145,7 @@ class CircuitBreaker:
         """
         Removes an exception from the list of excluded exceptions.
         """
-        with self._lock:
-            self._excluded_exception_types.remove(exception)
+        self._excluded_exception_types.remove(exception)
 
     def _inc_counter(self):
         """
@@ -180,8 +175,8 @@ class CircuitBreaker:
             # it is a decorator that needs to avoid triggering
             # the circuit breaker twice
             return func(*args, **kwargs)
-        with self._lock:
-            return self.state.call(func, *args, **kwargs)
+
+        return self.state.call(func, *args, **kwargs)
 
     async def call_async(self, func: Callable[..., Coroutine], *args, **kwargs):
         """
@@ -193,17 +188,16 @@ class CircuitBreaker:
             # it is a decorator that needs to avoid triggering
             # the circuit breaker twice
             return await func(*args, **kwargs)
-        with self._lock:
-            return await self.state.call_async(func, *args, **kwargs)
+
+        return await self.state.call_async(func, *args, **kwargs)
 
     def open(self):
         """
         Opens the circuit, e.g., the following calls will immediately fail
         until timeout elapses.
         """
-        with self._lock:
-            self._state_storage.opened_at = datetime.utcnow()
-            self.state = self._state_storage.state = CircuitBreakerState.OPEN
+        self._state_storage.opened_at = datetime.utcnow()
+        self.state = self._state_storage.state = CircuitBreakerState.OPEN
 
     def half_open(self):
         """
@@ -211,15 +205,13 @@ class CircuitBreaker:
         opens the circuit if the call fails (or closes the circuit if the call
         succeeds).
         """
-        with self._lock:
-            self.state = self._state_storage.state = CircuitBreakerState.HALF_OPEN
+        self.state = self._state_storage.state = CircuitBreakerState.HALF_OPEN
 
     def close(self):
         """
         Closes the circuit, e.g. lets the following calls execute as usual.
         """
-        with self._lock:
-            self.state = self._state_storage.state = CircuitBreakerState.CLOSED
+        self.state = self._state_storage.state = CircuitBreakerState.CLOSED
 
     def __call__(self, *call_args, ignore_on_call=True):
         """
@@ -263,8 +255,7 @@ class CircuitBreaker:
         """
         Registers a listener for this circuit breaker.
         """
-        with self._lock:
-            self._listeners.append(listener)
+        self._listeners.append(listener)
 
     def add_listeners(self, *listeners):
         """
@@ -277,8 +268,7 @@ class CircuitBreaker:
         """
         Unregisters a listener of this circuit breaker.
         """
-        with self._lock:
-            self._listeners.remove(listener)
+        self._listeners.remove(listener)
 
     @property
     def name(self) -> str:

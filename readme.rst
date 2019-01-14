@@ -24,7 +24,6 @@ Features
 - Support for several event listeners per circuit breaker
 - Can guard generator functions
 - Functions and properties for easy monitoring and management
-- Thread-safe
 - ``asyncio`` support
 - Optional redis backing
 - Synchronous and asynchronous event listeners

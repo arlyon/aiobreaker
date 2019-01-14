@@ -9,7 +9,7 @@ FORK 1.1.0 (Jan 14, 2019)
 
 * Add logic to stop calling decorator trigger twice
 * Fix bug with timeout window growing with additional breakers defined (Thanks @shawndrape)
-
+* Remove threading support (unneeded with asyncio)
 
 FORK 1.0.0 (Aug 12, 2018)
 
