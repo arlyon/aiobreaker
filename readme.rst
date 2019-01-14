@@ -1,24 +1,23 @@
-# AioBreaker
+aiobreaker
+==========
 
-PyBreaker is a Python implementation of the Circuit Breaker pattern, described
-in Michael T. Nygard's book [Release It!](http://pragprog.com/titles/mnee/release-it).
+aiobreaker is a Python implementation of the Circuit Breaker pattern,
+described in Michael T. Nygard's book `Release It!`_.
 
 Circuit breakers exist to allow one subsystem to fail without destroying
 the entire system. This is done by wrapping dangerous operations
 (typically integration points) with a component that can circumvent
 calls when the system is not healthy.
 
-This project is a fork of [pybreaker](github.com/danielfm/pybreaker)
-by Daniel Fernandes Martins for a few reasons:
+This project is a fork of pybreaker_ by Daniel Fernandes Martins that
+replaces tornado with native asyncio, originally so I could practice
+packaging and learn about that shiny new ``typing`` package.
 
-- learning python packaging
-- learning python testing
-- learning python documentation
-- significant refactor when supporting asyncio
-- removal of tornado support
-- removal of python 2.7 - 3.4 support
+.. _`Release It!`: https://pragprog.com/titles/mnee/release-it
+.. _pybreaker: https://github.com/danielfm/pybreaker
 
-## Features
+Features
+--------
 
 - Configurable list of excluded exceptions (e.g. business exceptions)
 - Configurable failure threshold and reset timeout
@@ -26,23 +25,31 @@ by Daniel Fernandes Martins for a few reasons:
 - Can guard generator functions
 - Functions and properties for easy monitoring and management
 - Thread-safe
-- Asyncio support
+- ``asyncio`` support
 - Optional redis backing
+- Synchronous and asynchronous event listeners
 
-## Requirements
+Requirements
+------------
 
-All you need is `python 3.5` or higher.
+All you need is ``python 3.5`` or higher.
 
-## Installation
+Installation
+------------
 
 To install, simply download from pypi:
 
-    $ pip install aiobreaker
+.. code:: bash
 
-## Usage
+    pip install aiobreaker
 
-The first step is to create an instance of `CircuitBreaker` for each
+Usage
+-----
+
+The first step is to create an instance of ``CircuitBreaker`` for each
 integration point you want to protect against.
+
+.. code:: python
 
     from aiobreaker import CircuitBreaker
 

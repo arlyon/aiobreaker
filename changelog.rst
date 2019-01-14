@@ -1,6 +1,23 @@
 Changelog
 =========
 
+FORK 2.0.0 (TBD)
+
+* Move breaker state to enum
+
+FORK 1.1.0 (Jan 14, 2019)
+
+* Add logic to stop calling decorator trigger twice
+* Fix bug with timeout window growing with additional breakers defined (Thanks @shawndrape)
+
+
+FORK 1.0.0 (Aug 12, 2018)
+
+* Move over to asyncio
+* Drop < 3.4 support
+* Drop tornado support
+* Async call support
+
 Version 0.4.4 (May 21, 2018)
 
 * Fix PyPI release
