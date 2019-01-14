@@ -1,3 +1,4 @@
+import asyncio
 import types
 from abc import ABC
 from datetime import datetime, timedelta
@@ -16,11 +17,14 @@ class CircuitBreakerError(Exception):
         :param reopen_time: When the breaker re-opens.
         """
         self.message = message
-        self._reopen_time = reopen_time
+        self.reopen_time = reopen_time
 
     @property
     def time_remaining(self) -> timedelta:
-        return self._reopen_time - datetime.now()
+        return self.reopen_time - datetime.now()
+
+    async def sleep_until_open(self):
+        await asyncio.sleep(self.time_remaining.total_seconds())
 
 
 T = TypeVar('T')
@@ -171,8 +175,7 @@ class CircuitClosedState(CircuitBreakerBaseState):
         """
         if self._breaker._state_storage.counter >= self._breaker.fail_max:
             self._breaker.open()
-            raise CircuitBreakerError('Failures threshold reached, circuit breaker opened.',
-                                      datetime.now() + self._breaker.timeout_duration) from exception
+            raise CircuitBreakerError('Failures threshold reached, circuit breaker opened.', self._breaker.opens_at) from exception
 
 
 class CircuitOpenState(CircuitBreakerBaseState):
@@ -202,7 +205,7 @@ class CircuitOpenState(CircuitBreakerBaseState):
         timeout = self._breaker.timeout_duration
         opened_at = self._breaker._state_storage.opened_at
         if opened_at and datetime.utcnow() < opened_at + timeout:
-            raise CircuitBreakerError('Timeout not elapsed yet, circuit breaker still open', datetime.now() + self._breaker.timeout_duration)
+            raise CircuitBreakerError('Timeout not elapsed yet, circuit breaker still open', self._breaker.opens_at)
 
     def call(self, func, *args, **kwargs):
         """
@@ -245,7 +248,7 @@ class CircuitHalfOpenState(CircuitBreakerBaseState):
         """
         self._breaker.open()
         raise CircuitBreakerError('Trial call failed, circuit breaker opened.',
-                                  datetime.now() + self._breaker.timeout_duration) from exception
+                                  self._breaker.opens_at) from exception
 
     def on_success(self):
         """

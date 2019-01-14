@@ -1,3 +1,4 @@
+import asyncio
 from asyncio import sleep
 
 from pytest import mark, raises
@@ -127,6 +128,21 @@ async def test_successful_after_timeout(storage, delta):
     assert 0 == breaker.fail_counter
     assert CircuitBreakerState.CLOSED == breaker.current_state
     assert 1 == func_succeed_async.call_count
+
+
+async def test_successful_after_wait(storage, delta):
+    """It should accurately report the time needed to wait."""
+
+    breaker = CircuitBreaker(fail_max=1, timeout_duration=delta, state_storage=storage)
+    func_succeed_async = func_succeed_counted_async()
+
+    try:
+        await breaker.call_async(func_exception_async)
+    except CircuitBreakerError as e:
+        await asyncio.sleep(e.time_remaining.total_seconds())
+
+    await breaker.call_async(func_succeed_async)
+    assert func_succeed_async.call_count == 1
 
 
 async def test_failed_call_when_half_open(storage):

@@ -76,6 +76,29 @@ class CircuitBreaker:
         """
         self._timeout_duration = timeout
 
+    @property
+    def opens_at(self) -> Optional[datetime]:
+        """Gets the remaining timeout for a breaker."""
+        open_at = self._state_storage.opened_at + self.timeout_duration
+        if open_at < datetime.now():
+            return None
+        else:
+            return open_at
+
+    @property
+    def time_until_open(self) -> Optional[timedelta]:
+        """
+        Returns a timedelta representing the difference between the current
+        time and when the breaker closes again, or None if it has elapsed.
+        """
+        opens_in = self.opens_at - datetime.now()
+        if opens_in < timedelta(0):
+            return None
+        return opens_in
+
+    async def sleep_until_open(self):
+        await asyncio.sleep(self.time_until_open.total_seconds())
+
     def _create_new_state(self, new_state: CircuitBreakerState, prev_state=None,
                           notify=False) -> 'CircuitBreakerBaseState':
         """
