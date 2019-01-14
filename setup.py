@@ -2,13 +2,15 @@
 # -*- coding:utf-8 -*-
 
 from setuptools import setup, find_packages
+from aiobreaker import version
+
 
 with open("readme.md", "r") as fh:
     long_description = fh.read()
 
 setup(
     name='aiobreaker',
-    version='1.0',
+    version=version.__version__,
     url='https://github.com/arlyon/aiobreaker',
     license='BSD',
     authors='Alexander Lyon',
