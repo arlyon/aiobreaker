@@ -24,12 +24,12 @@ class CircuitBreaker:
                  name: Optional[str] = None):
         """
         Creates a new circuit breaker with the given parameters.
+
         :param fail_max: The maximum number of failures for the breaker.
         :param timeout_duration: The timeout to elapse for a breaker to close again.
         :param exclude: A list of excluded :class:`Exception` types to ignore.
         :param listeners: A list of :class:`CircuitBreakerListener`
-        :param state_storage: A type of storage. Defaults to :class:`CircuitMemoryStorage`
-        :param name: The name for the breaker.
+        :param state_storage: A type of storage. Defaults to :class:`~aiobreaker.storage.memory.CircuitMemoryStorage`
         """
         self._lock = RLock()
         self._state_storage = state_storage or CircuitMemoryStorage(CircuitBreakerState.CLOSED)
@@ -140,6 +140,7 @@ class CircuitBreaker:
     def add_excluded_exceptions(self, *exceptions):
         """
         Adds exceptions to the list of excluded exceptions.
+
         :param exceptions: Any Exception types you wish to ignore.
         """
         for exc in exceptions:

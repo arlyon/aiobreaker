@@ -30,7 +30,6 @@ class CircuitBreakerStorage(ABC):
         """
         Override this method to retrieve the current circuit breaker state.
         """
-        pass
 
     @state.setter
     @abstractmethod
@@ -38,21 +37,18 @@ class CircuitBreakerStorage(ABC):
         """
         Override this method to set the current circuit breaker state.
         """
-        pass
 
     @abstractmethod
     def increment_counter(self):
         """
         Override this method to increase the failure counter by one.
         """
-        pass
 
     @abstractmethod
     def reset_counter(self):
         """
         Override this method to set the failure counter to zero.
         """
-        pass
 
     @property
     @abstractmethod
@@ -60,7 +56,6 @@ class CircuitBreakerStorage(ABC):
         """
         Override this method to retrieve the current value of the failure counter.
         """
-        pass
 
     @property
     @abstractmethod
@@ -69,7 +64,6 @@ class CircuitBreakerStorage(ABC):
         Override this method to retrieve the most recent value of when the
         circuit was opened.
         """
-        pass
 
     @opened_at.setter
     @abstractmethod
@@ -78,4 +72,3 @@ class CircuitBreakerStorage(ABC):
         Override this method to set the most recent value of when the circuit
         was opened.
         """
-        pass

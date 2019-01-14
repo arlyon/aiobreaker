@@ -3,7 +3,7 @@ import logging
 import time
 from datetime import datetime
 
-from aiobreaker.state import CircuitClosedState, CircuitBreakerState
+from aiobreaker.state import CircuitBreakerState
 from .base import CircuitBreakerStorage
 
 try:
@@ -89,7 +89,6 @@ class CircuitRedisStorage(CircuitBreakerStorage):
             self._redis.set(self._namespace('state'), state.name)
         except self.RedisError:
             self.logger.error('RedisError', exc_info=True)
-            pass
 
     def increment_counter(self):
         """
@@ -99,7 +98,6 @@ class CircuitRedisStorage(CircuitBreakerStorage):
             self._redis.incr(self._namespace('fail_counter'))
         except self.RedisError:
             self.logger.error('RedisError', exc_info=True)
-            pass
 
     def reset_counter(self):
         """
@@ -109,7 +107,6 @@ class CircuitRedisStorage(CircuitBreakerStorage):
             self._redis.set(self._namespace('fail_counter'), 0)
         except self.RedisError:
             self.logger.error('RedisError', exc_info=True)
-            pass
 
     @property
     def counter(self):
@@ -161,7 +158,6 @@ class CircuitRedisStorage(CircuitBreakerStorage):
             self._redis.transaction(set_if_greater, key)
         except self.RedisError:
             self.logger.error('RedisError', exc_info=True)
-            pass
 
     def _namespace(self, key):
         name_parts = [self.BASE_NAMESPACE, key]
