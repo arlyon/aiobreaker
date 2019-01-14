@@ -2,11 +2,15 @@
 # -*- coding:utf-8 -*-
 
 from setuptools import setup, find_packages
+
 from aiobreaker import version
 
-
-with open("readme.md", "r") as fh:
+with open("readme.rst", "r") as fh:
     long_description = fh.read()
+
+test_dependencies = ['fakeredis', 'pytest>4', 'pytest-asyncio', 'mypy', 'pylint', 'safety', 'bandit', 'codecov', 'pytest-cov']
+redis_dependencies = ['redis']
+documentation_dependencies = ['sphinx', 'sphinx_rtd_theme', 'sphinx-autobuild', 'sphinx-autodoc-typehints']
 
 setup(
     name='aiobreaker',
@@ -21,7 +25,12 @@ setup(
     packages=find_packages(),
     py_modules=['aiobreaker'],
     install_requires=[],
-    tests_require=['redis', 'fakeredis', 'pytest', 'pytest-asyncio'],
+    tests_require=test_dependencies,
+    extras_require={
+        'test': test_dependencies,
+        'docs': documentation_dependencies,
+        'redis': redis_dependencies,
+    },
     classifiers=[
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',

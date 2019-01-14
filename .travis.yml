@@ -1,0 +1,35 @@
+language: python
+python:
+  - 3.6
+
+cache:
+  directories:
+    - $PIP_CACHE_DIR
+env:
+  global:
+    - PIP_CACHE_DIR=$HOME/.cache/pip
+install:
+  - pip install -e .[test]
+
+jobs:
+  include:
+    - stage: test
+      name: PyLint
+      script: pylint aiobreaker; true
+    - stage: test
+      name: Test Runner
+      script: pytest test --cov=aiobreaker
+      after_success: codecov
+    - stage: test
+      name: Type Analysis
+      script: mypy server; true
+    - stage: secure
+      name: Dependency Warnings
+      script: safety check
+    - stage: secure
+      name: Security Warnings
+      script: bandit -r aiobreaker
+
+stages:
+  - test
+  - secure

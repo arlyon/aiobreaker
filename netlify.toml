@@ -1,0 +1,3 @@
+[build]
+  publish = "docs/build"
+  command = "pip install -e .[docs] && sphinx-build docs/source docs/build"
