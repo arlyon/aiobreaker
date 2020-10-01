@@ -139,7 +139,7 @@ async def test_successful_after_wait(storage, delta):
     try:
         await breaker.call_async(func_exception_async)
     except CircuitBreakerError as e:
-        await asyncio.sleep(e.time_remaining.total_seconds())
+        await asyncio.sleep(delta.total_seconds())
 
     await breaker.call_async(func_succeed_async)
     assert func_succeed_async.call_count == 1
