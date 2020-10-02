@@ -24,6 +24,7 @@ setup(
     long_description_content_type="text/markdown",
     packages=find_packages(),
     py_modules=['aiobreaker'],
+    python_requires='>=3.5',
     install_requires=[],
     tests_require=test_dependencies,
     extras_require={
@@ -35,7 +36,7 @@ setup(
         'Intended Audience :: Developers',
         'License :: OSI Approved :: BSD License',
         'Programming Language :: Python',
-        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.5',
         'Topic :: Software Development :: Libraries',
     ],
 )
