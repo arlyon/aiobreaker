@@ -17,7 +17,7 @@ setup(
     version=version.__version__,
     url='https://github.com/arlyon/aiobreaker',
     license='BSD',
-    authors='Alexander Lyon',
+    author='Alexander Lyon',
     author_email='arlyon@me.com',
     description='Python implementation of the Circuit Breaker pattern.',
     long_description=long_description,

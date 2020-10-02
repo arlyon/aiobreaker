@@ -26,6 +26,17 @@ and install the extra test dependencies via pip:
     pip install -e '.[docs]'
     sphinx-build docs/source docs/build
 
+Release
+-------
+
+Releases are currently done manually using twine:
+
+.. code:: bash
+
+    pip install twine wheel
+    python setup.py sdist bdist_wheel
+    twine upload -r pypi dist/*
+
 License
 -------
 
