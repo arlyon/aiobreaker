@@ -89,3 +89,11 @@ Exceptions can be ignored on the fly with the
 :func:`~aiobreaker.circuitbreaker.CircuitBreaker.add_excluded_exception` and
 :func:`~aiobreaker.circuitbreaker.CircuitBreaker.remove_excluded_exception`
 functions.
+
+So as to cover cases where the exception class alone is not enough to determine whether it represents a system error, you may also pass a callable rather than a type:
+
+.. code:: python
+
+    db_breaker = CircuitBreaker(exclude=[lambda e: type(e) == HTTPError and e.status_code < 500])
+
+You may mix types and filter callables freely.
