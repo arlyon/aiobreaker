@@ -1,7 +1,8 @@
+import asyncio
 import inspect
 from datetime import timedelta, datetime
 from functools import wraps
-from typing import Optional, Iterable, Callable, Coroutine, Type
+from typing import Optional, Iterable, Callable, Coroutine, Type, List, Union, Tuple
 
 from .listener import CircuitBreakerListener
 from .state import CircuitBreakerState, CircuitBreakerBaseState
@@ -18,7 +19,7 @@ class CircuitBreaker:
 
     def __init__(self, fail_max=5,
                  timeout_duration: Optional[timedelta] = None,
-                 exclude: Optional[Iterable[Type[Exception]]] = None,
+                 exclude: Optional[Iterable[Union[Callable, Type[Exception]]]] = None,
                  listeners: Optional[Iterable[CircuitBreakerListener]] = None,
                  state_storage: Optional[CircuitBreakerStorage] = None,
                  name: Optional[str] = None):
@@ -37,8 +38,8 @@ class CircuitBreaker:
         self._fail_max = fail_max
         self._timeout_duration = timeout_duration if timeout_duration else timedelta(seconds=60)
 
-        self._excluded_exception_types = list(exclude) if exclude else []
-        self._listeners = list(listeners) if listeners else []
+        self._excluded_exceptions: List[Union[Callable, Type[Exception]]] = list(exclude or [])
+        self._listeners = list(listeners or [])
         self._name = name
 
     @property
@@ -142,18 +143,18 @@ class CircuitBreaker:
         return self._state_storage.state
 
     @property
-    def excluded_exceptions(self) -> Type[Exception]:
+    def excluded_exceptions(self) -> tuple:
         """
         Returns a tuple of the excluded exceptions, e.g., exceptions that should
         not be considered system errors by this circuit breaker.
         """
-        return tuple(self._excluded_exception_types)
+        return tuple(self._excluded_exceptions)
 
     def add_excluded_exception(self, exception: Type[Exception]):
         """
         Adds an exception to the list of excluded exceptions.
         """
-        self._excluded_exception_types.append(exception)
+        self._excluded_exceptions.append(exception)
 
     def add_excluded_exceptions(self, *exceptions):
         """
@@ -168,7 +169,7 @@ class CircuitBreaker:
         """
         Removes an exception from the list of excluded exceptions.
         """
-        self._excluded_exception_types.remove(exception)
+        self._excluded_exceptions.remove(exception)
 
     def _inc_counter(self):
         """
@@ -178,15 +179,20 @@ class CircuitBreaker:
 
     def is_system_error(self, exception: Exception):
         """
-        Returns whether the exception 'exception' is considered a signal of
+        Returns whether the exception `exception` is considered a signal of
         system malfunction. Business exceptions should not cause this circuit
         breaker to open.
-
-        It does this by making sure the given exception is not a subclass
-        of the excluded exceptions.
         """
         exception_type = type(exception)
-        return not issubclass(exception_type, tuple(self._excluded_exception_types))
+        for exclusion in self._excluded_exceptions:
+            if type(exclusion) is type:
+                if issubclass(exception_type, exclusion):
+                    return False
+            elif callable(exclusion):
+                if exclusion(exception):
+                    return False
+
+        return True
 
     def call(self, func: Callable, *args, **kwargs):
         """
