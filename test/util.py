@@ -5,7 +5,9 @@ class DummyException(Exception):
     """
     A more specific error to call during the tests.
     """
-    pass
+
+    def __init__(self, val=0):
+        self.val = val
 
 
 def func_exception():

@@ -158,31 +158,35 @@ def test_remove_listener():
 def test_excluded_exceptions():
     """CircuitBreaker: it should ignore specific exceptions.
     """
-    breaker = CircuitBreaker(exclude=[LookupError])
+    breaker = CircuitBreaker(
+        exclude=[LookupError, lambda e: type(e) == DummyException and e.val == 3])
 
-    def err_1(): raise DummyException()
+    def err_1(): raise LookupError()
 
-    def err_2(): raise LookupError()
+    def err_2(): raise DummyException()
 
     def err_3(): raise KeyError()
 
-    with raises(DummyException):
-        breaker.call(err_1)
-    assert 1 == breaker.fail_counter
+    def err_4(): raise DummyException(val=3)
 
     # LookupError is not considered a system error
     with raises(LookupError):
-        breaker.call(err_2)
+        breaker.call(err_1)
     assert 0 == breaker.fail_counter
 
     with raises(DummyException):
-        breaker.call(err_1)
+        breaker.call(err_2)
     assert 1 == breaker.fail_counter
 
     # Should consider subclasses as well (KeyError is a subclass of
     # LookupError)
     with raises(KeyError):
         breaker.call(err_3)
+    assert 0 == breaker.fail_counter
+
+    # should filter based on functions as well
+    with raises(DummyException):
+        breaker.call(err_4)
     assert 0 == breaker.fail_counter
 
 
