@@ -31,7 +31,7 @@ Features
 Requirements
 ------------
 
-All you need is ``python 3.5`` or higher.
+All you need is ``python 3.6`` or higher.
 
 Installation
 ------------
