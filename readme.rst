@@ -13,7 +13,7 @@ This project is a fork of pybreaker_ by Daniel Fernandes Martins that
 replaces tornado with native asyncio, originally so I could practice
 packaging and learn about that shiny new ``typing`` package.
 
-.. _`Release It!`: https://pragprog.com/titles/mnee/release-it
+.. _`Release It!`: https://pragprog.com/titles/mnee2/release-it-second-edition/
 .. _pybreaker: https://github.com/danielfm/pybreaker
 
 Features
