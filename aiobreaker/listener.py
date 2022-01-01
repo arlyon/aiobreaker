@@ -28,7 +28,7 @@ class CircuitBreakerListener:
         Called when a function executed over the circuit breaker 'breaker' succeeds.
         """
 
-    def state_change(self, breaker: 'CircuitBreaker', old: 'CircuitBreakerState', new: 'CircuitBreakerState') -> None:
+    def state_change(self, breaker: 'CircuitBreaker', old: 'CircuitBreakerBaseState', new: 'CircuitBreakerBaseState') -> None:
         """
         Called when the state of the circuit breaker 'breaker' changes.
         """
